@@ -33,6 +33,13 @@ import solvemail
 
 solvemail.init()  # reads credentials.json + token.json in cwd
 
+# For multiple accounts, use separate token files:
+# solvemail.init(token_path='work.json')    # first run opens browser to auth
+# solvemail.init(token_path='personal.json') # switch account without re-auth
+
+# Check which account you're using
+solvemail.profile().email
+
 # Search for threads
 threads = solvemail.search_threads('is:unread newer_than:7d', max_results=10)
 
