@@ -11,7 +11,7 @@ pip install solvemail
 Or for development:
 
 ```bash
-pip install -e ".[dev]"
+pip install -e .
 ```
 
 ## OAuth setup
@@ -40,8 +40,11 @@ solvemail.init()  # reads credentials.json + token.json in cwd
 # Check which account you're using
 solvemail.profile().email
 
+# solvemail exports the key API functionality through wildcard import
+from solvemail import *
+
 # Search for threads
-threads = solvemail.search_threads('is:unread newer_than:7d', max_results=10)
+threads = search_threads('is:unread newer_than:7d', max_results=10)
 
 # Get thread details
 t = threads[0]
@@ -53,7 +56,7 @@ m = t.msgs()[0]
 m.subj, m.frm, m.snip, m.text()
 
 # Send an email
-solvemail.send(to='someone@example.com', subj='Hello', body='Hi there!')
+send(to='someone@example.com', subj='Hello', body='Hi there!')
 
 # Create and send a reply
 draft = t.reply_draft(body='Thanks!')
@@ -66,16 +69,16 @@ draft.send()
 
 ```python
 # Search threads (conversations)
-solvemail.search_threads('from:boss@company.com', max_results=20)
+search_threads('from:boss@company.com', max_results=20)
 
 # Search individual messages
-solvemail.search_msgs('has:attachment filename:pdf', max_results=100)
+search_msgs('has:attachment filename:pdf', max_results=100)
 ```
 
 ### Messages
 
 ```python
-m = solvemail.msg(id)           # Fetch by id
+m = msg(id)           # Fetch by id
 m.subj, m.frm, m.to             # Headers
 m.text(), m.html()              # Body content
 m.mark_read(), m.mark_unread()  # Read status
@@ -89,7 +92,7 @@ m.rm_labels('INBOX')            # Remove labels
 ### Threads
 
 ```python
-t = solvemail.thread(id)        # Fetch by id
+t = thread(id)        # Fetch by id
 t.msgs()                        # List messages
 t.reply_draft(body='...')       # Create reply draft
 t.reply(body='...')             # Send reply directly
@@ -98,29 +101,29 @@ t.reply(body='...')             # Send reply directly
 ### Labels
 
 ```python
-solvemail.labels()                        # List all labels
-solvemail.label('INBOX')                  # Get by name or id
-solvemail.find_labels('project')          # Search labels
-solvemail.create_label('My Label')        # Create new label
+labels()                        # List all labels
+label('INBOX')                  # Get by name or id
+find_labels('project')          # Search labels
+create_label('My Label')        # Create new label
 ```
 
 ### Drafts
 
 ```python
-solvemail.drafts()                        # List drafts
-solvemail.create_draft(to='...', subj='...', body='...')
-solvemail.reply_to_thread(thread_id, body='...')
+drafts()                        # List drafts
+create_draft(to='...', subj='...', body='...')
+reply_to_thread(thread_id, body='...')
 ```
 
 ### Bulk operations
 
 ```python
 # Batch modify labels (auto-chunks, no 1000 message limit)
-ids = [m.id for m in solvemail.search_msgs('in:inbox')]
-solvemail.batch_label(ids, add=['SPAM'], rm=['INBOX'])
+ids = [m.id for m in search_msgs('in:inbox')]
+batch_label(ids, add=['SPAM'], rm=['INBOX'])
 
 # Trash multiple messages
-solvemail.trash_msgs(ids)
+trash_msgs(ids)
 ```
 
 ## Using the Gmail class directly
