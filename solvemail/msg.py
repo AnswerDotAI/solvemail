@@ -21,7 +21,20 @@ def b64d(s):
 
 def _as_addr(x): return ', '.join(map(str,L(x))) if is_listy(x) else x
 
-def mk_email(to=None,subj=None,body=None,html=None,cc=None,bcc=None,frm=None,reply_to=None,headers=None,msgid=None,date=True,att=None):
+def mk_email(
+    to:str=None,       # Recipient email address(es), comma-separated
+    subj:str=None,     # Subject line
+    body:str=None,     # Plain text body
+    html:str=None,     # HTML body
+    cc:str=None,       # CC recipient(s), comma-separated
+    bcc:str=None,      # BCC recipient(s), comma-separated
+    frm:str=None,      # From address
+    reply_to:str=None, # Reply-To address
+    headers:dict=None, # Additional headers dict
+    msgid:str=None,    # Message-ID header
+    date:bool=True,    # Include Date header?
+    att:list=None      # Attachments
+) -> EmailMessage:     # Constructed email message
     "Create an `EmailMessage` from `to`,`subj`,`body`,`html`"
     m = EmailMessage()
     if frm:      m['From'] = frm

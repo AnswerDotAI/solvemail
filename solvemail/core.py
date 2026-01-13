@@ -64,16 +64,21 @@ class Msg:
     @property
     def snip(self): return self.d.get('snippet')
 
-    def get(self,fmt='full',metadata_headers=None):
-        "Fetch message with `fmt`"
+    def get(self,
+        fmt:str='full',           # Format: 'full', 'metadata', 'minimal', or 'raw'
+        metadata_headers=None     # Headers to include in metadata format
+    ):
+        "Fetch message data from Gmail"
         body = dict(userId=self.gmail.user_id,id=self.id,format=fmt)
         if metadata_headers: body['metadataHeaders'] = L(metadata_headers).items
         self.d = self.gmail._exec(self.gmail._u.messages().get(**body))
         self._cache = {}
         return self
 
-    def hdrs(self,refresh=False):
-        "Lowercased headers dict"
+    def hdrs(self,
+        refresh:bool=False  # Refresh from API?
+    ):
+        "Get lowercased headers dict"
         if refresh or 'hdrs' not in self._cache:
             if not self.d.get('payload'): self.get(fmt='metadata')
             self._cache['hdrs'] = hdrs_dict(self.d.get('payload',{}).get('headers',[]))
@@ -91,29 +96,36 @@ class Msg:
     def refs(self):  return self.hdrs().get('references')
 
     def text(self):
-        "Return first text/plain body, if present"
+        "Get plain text body"
         if not self.d.get('payload'): self.get(fmt='full')
         return txt_part(self.d.get('payload'))
 
     def html(self):
-        "Return first text/html body, if present"
+        "Get HTML body"
         if not self.d.get('payload'): self.get(fmt='full')
         return html_part(self.d.get('payload'))
 
-    def raw(self,refresh=False):
-        "Return base64url raw RFC 2822 message"
+    def raw(self,
+        refresh:bool=False  # Refresh from API?
+    ):
+        "Get base64url raw RFC 2822 message"
         if refresh or 'raw' not in self._cache:
             d = self.gmail._exec(self.gmail._u.messages().get(userId=self.gmail.user_id,id=self.id,format='raw'))
             self._cache['raw'] = d.get('raw')
         return self._cache['raw']
 
-    def email(self,refresh=False):
-        "Return parsed `EmailMessage`"
+    def email(self,
+        refresh:bool=False  # Refresh from API?
+    ):
+        "Get parsed EmailMessage object"
         if refresh or 'email' not in self._cache: self._cache['email'] = parse_raw(self.raw(refresh=refresh))
         return self._cache['email']
 
-    def modify(self,add=None,rm=None):
-        "Modify labels by adding `add` and removing `rm`"
+    def modify(self,
+        add:list=None,  # Label ids/names to add
+        rm:list=None    # Label ids/names to remove
+    ):
+        "Modify labels on this message"
         add,rm = self.gmail.lbl_ids(add),self.gmail.lbl_ids(rm)
         body = dict(addLabelIds=add,removeLabelIds=rm)
         self.d = self.gmail._exec(self.gmail._u.messages().modify(userId=self.gmail.user_id,id=self.id,body=body))
@@ -150,19 +162,27 @@ class Msg:
         if not self.d.get('payload'): self.get(fmt='full')
         return att_parts(self.d.get('payload'))
 
-    def att(self,part):
-        "Download attachment `part`"
+    def att(self, part):
+        "Download attachment"
         part = part if isinstance(part,dict) else self.att_parts()[part]
         aid = part['body']['attachmentId']
         res = self.gmail._exec(self.gmail._u.messages().attachments().get(userId=self.gmail.user_id,messageId=self.id,id=aid))
         return b64d(res.get('data',''))
 
-    def reply_draft(self,body=None,html=None,**kwargs):
-        "Create a reply draft for this message with `body`/`html`"
+    def reply_draft(self,
+        body:str=None,  # Plain text body
+        html:str=None,  # HTML body
+        **kwargs
+    ):
+        "Create a reply draft"
         return self.gmail.reply_draft(self,body=body,html=html,**kwargs)
 
-    def reply(self,body=None,html=None,**kwargs):
-        "Send a reply to this message with `body`/`html`"
+    def reply(self,
+        body:str=None,  # Plain text body
+        html:str=None,  # HTML body
+        **kwargs
+    ):
+        "Send a reply"
         return self.reply_draft(body=body,html=html,**kwargs).send()
 
 class Thread:
@@ -280,11 +300,13 @@ class Draft:
         return Msg(self.gmail,d=res)
 
 class Gmail:
-    def __init__(self,creds=None,creds_path='credentials.json',token_path='token.json',scopes=None,user_id='me',interactive=True,retries=3):
+    def __init__(self, creds=None, creds_path='credentials.json', token_path='token.json', scopes=None,
+                 user_id='me', interactive=True, retries=3):
         "Gmail client using OAuth `creds` or `creds_path`/`token_path`"
-        self.creds = ifnone(creds,oauth_creds(creds_path=creds_path,token_path=token_path,scopes=ifnone(scopes,df_scopes),interactive=interactive))
-        self.user_id,self.retries = user_id,retries
-        self.s = gmail_service(self.creds)
+        if creds is None:
+            creds = oauth_creds(creds_path=creds_path, token_path=token_path, scopes=ifnone(scopes, df_scopes), interactive=interactive)
+        store_attr()
+        self.s = gmail_service(creds)
         self._u = self.s.users()
         self._lbls = None
 
@@ -292,22 +314,29 @@ class Gmail:
         for i in range(self.retries+1):
             try: return req.execute(num_retries=0)
             except HttpError as e:
-                if e.resp.status in (429,500,503) and i<self.retries: _exp_backoff(i); continue
+                if e.resp.status in (429,500,503) and i<self.retries:
+                    _exp_backoff(i)
+                    continue
                 raise
 
-    def profile(self):
-        "Return profile resource"
+    def profile(self):  # Profile with `email` attribute
+        "Return profile resource with `email` attribute"
         d = self._exec(self._u.getProfile(userId=self.user_id))
         return AttrDict(d,email=d.get('emailAddress'))
 
-    def labels(self,refresh=False):
-        "List labels (cached)"
+    def labels(self,
+        refresh:bool=False  # Refresh cache?
+    ):  # List of Label objects
+        "List all labels"
         if refresh or self._lbls is None:
             d = self._exec(self._u.labels().list(userId=self.user_id))
             self._lbls = L(d.get('labels',[])).map(lambda o: Label(self,o))
         return self._lbls
 
-    def label(self,lbl,refresh=False):
+    def label(self,
+        lbl:str,            # Label id or name
+        refresh:bool=False  # Refresh cache?
+    ):  # Found label
         "Return label by id or name"
         lbl = _norm_lbl(lbl)
         if isinstance(lbl,Label): return lbl
@@ -318,7 +347,11 @@ class Gmail:
         if lbl in by_nm: return by_nm[lbl]
         raise KeyError(f'Unknown label: {lbl}')
 
-    def find_labels(self,term,refresh=False,regex=False):
+    def find_labels(self,
+        term:str,           # Search term
+        refresh:bool=False, # Refresh cache?
+        regex:bool=False    # Use regex matching?
+    ):  # Matching labels
         "Find labels matching `term`"
         lbls = self.labels(refresh=refresh)
         if regex:
@@ -327,8 +360,12 @@ class Gmail:
         term = term.lower()
         return lbls.filter(lambda o: term in o.name.lower())
 
-    def create_label(self,name,messageListVisibility='show',labelListVisibility='labelShow'):
-        "Create label `name`"
+    def create_label(self,
+        name:str,                              # Label name
+        messageListVisibility:str='show',      # 'show' or 'hide' in message list
+        labelListVisibility:str='labelShow'    # 'labelShow', 'labelShowIfUnread', or 'labelHide'
+    ):  # Created label
+        "Create a new label"
         d = dict(name=name,messageListVisibility=messageListVisibility,labelListVisibility=labelListVisibility)
         res = self._exec(self._u.labels().create(userId=self.user_id,body=d))
         self._lbls = None
@@ -346,9 +383,26 @@ class Gmail:
             except KeyError: return l
         return _uniq(L(lbls).map(_one) if is_listy(lbls) else L([lbls]).map(_one))
 
-    def msg(self,id,fmt='full'): return Msg(self,id=id).get(fmt=fmt)
-    def thread(self,id,fmt='full'): return Thread(self,id=id).get(fmt=fmt)
-    def draft(self,id,fmt='full'): return Draft(self,id=id).get(fmt=fmt)
+    def msg(self,
+        id:str,           # Message id
+        fmt:str='full'    # Format: 'full', 'metadata', 'minimal', or 'raw'
+    ):  # Fetched message
+        "Fetch message by id"
+        return Msg(self,id=id).get(fmt=fmt)
+
+    def thread(self,
+        id:str,           # Thread id
+        fmt:str='full'    # Format: 'full', 'metadata', or 'minimal'
+    ):  # Fetched thread
+        "Fetch thread by id"
+        return Thread(self,id=id).get(fmt=fmt)
+
+    def draft(self,
+        id:str,           # Draft id
+        fmt:str='full'    # Format: 'full', 'metadata', or 'minimal'
+    ):  # Fetched draft
+        "Fetch draft by id"
+        return Draft(self,id=id).get(fmt=fmt)
 
     def _list(self,fn,key,limit=None,**kwargs):
         tok,n = None,0
@@ -362,8 +416,13 @@ class Gmail:
             tok = d.get('nextPageToken')
             if not tok: break
 
-    def search_msgs(self,q=None,label_ids=None,max_results=50,include_spam_trash=False):
-        "Search messages using Gmail query `q`"
+    def search_msgs(self,
+        q:str=None,                     # Gmail search query (e.g. 'is:unread from:foo')
+        label_ids:list=None,            # Filter by label ids/names
+        max_results:int=50,             # Max messages to return (None for all)
+        include_spam_trash:bool=False   # Include spam/trash?
+    ):  # List of Msg objects
+        "Search messages using Gmail query"
         page_sz = min(max_results,500) if max_results else 500
         kwargs = dict(userId=self.user_id,maxResults=page_sz,includeSpamTrash=include_spam_trash)
         if q: kwargs['q'] = q
@@ -371,8 +430,13 @@ class Gmail:
         it = self._list(self._u.messages().list,'messages',limit=max_results,**kwargs)
         return L(it).map(lambda o: Msg(self,d=o))
 
-    def search_threads(self,q=None,label_ids=None,max_results=50,include_spam_trash=False):
-        "Search threads using Gmail query `q`"
+    def search_threads(self,
+        q:str=None,                     # Gmail search query (e.g. 'is:unread from:foo')
+        label_ids:list=None,            # Filter by label ids/names
+        max_results:int=50,             # Max threads to return (None for all)
+        include_spam_trash:bool=False   # Include spam/trash?
+    ):  # List of Thread objects
+        "Search threads using Gmail query"
         page_sz = min(max_results,500) if max_results else 500
         kwargs = dict(userId=self.user_id,maxResults=page_sz,includeSpamTrash=include_spam_trash)
         if q: kwargs['q'] = q
@@ -380,12 +444,11 @@ class Gmail:
         it = self._list(self._u.threads().list,'threads',limit=max_results,**kwargs)
         return L(it).map(lambda o: Thread(self,d=o))
 
-    def search(self,q=None,**kwargs):
-        "Alias for `search_threads`"
-        return self.search_threads(q=q,**kwargs)
-
-    def drafts(self,q=None,max_results=50):
-        "List drafts (optionally search by `q`)"
+    def drafts(self,
+        q:str=None,          # Gmail search query
+        max_results:int=50   # Max drafts to return (None for all)
+    ):  # List of Draft objects
+        "List drafts"
         page_sz = min(max_results,500) if max_results else 500
         kwargs = dict(userId=self.user_id,maxResults=page_sz)
         if q: kwargs['q'] = q
@@ -393,8 +456,12 @@ class Gmail:
         return L(it).map(lambda o: Draft(self,d=o))
 
     @delegates(mk_email)
-    def send(self,msg=None,thread_id=None,**kwargs):
-        "Send `msg` (EmailMessage) or build from kwargs"
+    def send(self,
+        msg=None,            # EmailMessage (or use kwargs)
+        thread_id:str=None,  # Thread id to reply in
+        **kwargs
+    ):  # Sent message
+        "Send email (pass `to`, `subj`, `body` etc or an EmailMessage)"
         msg = ifnone(msg,mk_email(**kwargs))
         body = dict(raw=raw_msg(msg))
         if thread_id: body['threadId'] = thread_id
@@ -402,8 +469,12 @@ class Gmail:
         return Msg(self,d=res)
 
     @delegates(mk_email)
-    def create_draft(self,msg=None,thread_id=None,**kwargs):
-        "Create a draft from `msg` (EmailMessage) or kwargs"
+    def create_draft(self,
+        msg=None,            # EmailMessage (or use kwargs)
+        thread_id:str=None,  # Thread id to reply in
+        **kwargs
+    ):  # Created draft
+        "Create a draft (pass `to`, `subj`, `body` etc or an EmailMessage)"
         msg = ifnone(msg,mk_email(**kwargs))
         body = dict(message=dict(raw=raw_msg(msg)))
         if thread_id: body['message']['threadId'] = thread_id
@@ -423,8 +494,15 @@ class Gmail:
         return dict(to=to,subj=subj,refs=refs,in_reply_to=in_reply_to)
 
     @delegates(mk_email)
-    def reply_draft(self,o,to=None,subj=None,headers=None,thread_id=None,**kwargs):
-        "Create a reply draft to message/thread `o` with `body`/`html`"
+    def reply_draft(self,
+        o,                   # Message/Thread object or message id
+        to:str=None,         # Override recipient
+        subj:str=None,       # Override subject
+        headers:dict=None,   # Additional headers dict
+        thread_id:str=None,  # Override thread id
+        **kwargs
+    ):  # Created reply draft
+        "Create a reply draft to message/thread"
         if isinstance(o,Thread): o = o.last()
         if not isinstance(o,Msg): o = Msg(self,id=o)
         o.get(fmt='metadata')
@@ -433,21 +511,56 @@ class Gmail:
         if rh['in_reply_to']: h['In-Reply-To'] = rh['in_reply_to']
         if rh['refs']:        h['References'] = rh['refs']
         t_id = ifnone(thread_id,o.thread_id)
-        msg = mk_email(to=rh['to'],subj=rh['subj'],headers=h)
+        msg = mk_email(to=rh['to'],subj=rh['subj'],headers=h,**kwargs)
         return self.create_draft(msg=msg,thread_id=t_id)
 
-    def batch_modify(self,ids,add=None,rm=None):
-        "Batch modify message `ids`"
-        ids = _uniq(L(ids).map(_as_id))
-        body = dict(ids=ids,addLabelIds=self.lbl_ids(add),removeLabelIds=self.lbl_ids(rm))
-        return self._exec(self._u.messages().batchModify(userId=self.user_id,body=body))
+    def reply_to_thread(self,
+        thread_id:str,       # Thread id to reply to
+        body:str,            # Plain text body
+        html:str=None,       # HTML body
+        reply_all:bool=True  # Reply to all recipients?
+    ):  # Created reply draft
+        "Create a reply draft for a thread"
+        t = self.thread(thread_id)
+        m = t.last().get(fmt='metadata')
+        h = m.hdrs()
+        to = h.get('reply-to') or h.get('from', '')
+        cc = None
+        if reply_all:
+            me = self.profile().email.lower()
+            cc = {a.strip() for a in (h.get('to','')+','+h.get('cc','')).split(',')
+                  if a.strip() and a.strip().lower() != me} - {to}
+            cc = ','.join(cc) or None
+        return t.reply_draft(body=body, html=html, to=to, cc=cc)
 
-    def batch_delete(self,ids):
-        "Permanently delete message `ids` (requires full mail scope)"
+    def _batch_label(self, ids, add=None, rm=None, delay=0):
+        if delay: time.sleep(delay)
+        body = dict(ids=list(ids), addLabelIds=self.lbl_ids(add), removeLabelIds=self.lbl_ids(rm))
+        return self._exec(self._u.messages().batchModify(userId=self.user_id, body=body))
+
+    def batch_label(self,
+        ids:list,         # Message ids (no limit)
+        add:list=None,    # Label ids/names to add
+        rm:list=None,     # Label ids/names to remove
+        chunk_sz:int=999, # Chunk size (max 1000)
+        delay:float=0.5   # Delay between chunks in seconds
+    ):  # List of API responses
+        "Batch modify labels on messages, auto-chunking"
+        ids = _uniq(L(ids).map(_as_id))
+        return [self._batch_label(b, add, rm, delay if i else 0)
+                for i,b in enumerate(chunked(ids, chunk_sz))]
+
+    def batch_delete(self,
+        ids:list  # Message ids to delete permanently (max 1000)
+    ):  # API response
+        "Permanently delete messages (requires full mail scope)"
         ids = _uniq(L(ids).map(_as_id))
         body = dict(ids=ids)
         return self._exec(self._u.messages().batchDelete(userId=self.user_id,body=body))
 
-    def trash_msgs(self,ids):
-        "Trash message `ids`"
+    def trash_msgs(self,
+        ids:list  # Message ids to trash
+    ):  # List of trashed messages
+        "Move messages to trash"
         return L(ids).map(_as_id).map(lambda i: self._exec(self._u.messages().trash(userId=self.user_id,id=i)))
+
