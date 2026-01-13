@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "solvemail"
+version = "0.1.0"
+description = "A fastai-style Gmail API client with convenient read/write support"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [{name="Answer.AI"}]
+dependencies = [
+  "fastcore>=1.7.0",
+  "google-api-python-client>=2.120.0",
+  "google-auth>=2.30.0",
+  "google-auth-oauthlib>=1.2.0",
+  "google-auth-httplib2>=0.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+  "pytest-timeout>=2.2.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["solvemail"]
+
+[tool.hatch.build.targets.sdist]
+include = ["solvemail", "tests", "README.md", "pyproject.toml"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+timeout = 120
