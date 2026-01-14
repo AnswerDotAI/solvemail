@@ -33,7 +33,7 @@ def mk_email(
     headers:dict=None, # Additional headers dict
     msgid:str=None,    # Message-ID header
     date:bool=True,    # Include Date header?
-    att:list=None      # Attachments
+    att:list[str]=None      # Attachments
 ) -> EmailMessage:     # Constructed email message
     "Create an `EmailMessage` from `to`,`subj`,`body`,`html`"
     m = EmailMessage()

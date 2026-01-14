@@ -5,7 +5,7 @@ from . import auth,core
 from .auth import *
 from .core import *
 
-__all__ = ['init','g'] + auth.__all__ + core.__all__ + [k for k in dir(Gmail) if not k.startswith('_')]
+__all__ = ['init','g','solvemail_tools'] + auth.__all__ + core.__all__ + [k for k in dir(Gmail) if not k.startswith('_')]
 def __dir__(): return __all__
 
 _g = None
@@ -28,4 +28,6 @@ def g():
     "Return the global `Gmail` client"
     if _g is None: raise AttributeError('Call solvemail.init(...) first')
     return _g
+
+def solvemail_tools(): return '&`[search_threads, search_msgs, thread, draft, drafts, labels, label, find_labels, profile, send, reply_draft, reply_to_thread, create_label, trash_msgs, view_inbox, view_inbox_threads, view_msg, view_thread, batch_delete, batch_label, message]`'
 

@@ -1,6 +1,7 @@
 from fastcore.utils import *
 from fastcore.meta import *
-import re,time
+import re,time,html,httpx
+from bs4 import BeautifulSoup
 from googleapiclient.errors import HttpError
 from .auth import oauth_creds,gmail_service,df_scopes
 from .msg import b64d,mk_email,raw_msg,parse_raw,hdrs_dict,att_parts,txt_part,html_part
@@ -53,7 +54,9 @@ class Msg:
         self._id = ifnone(id,self.d.get('id'))
         self._cache = {}
 
-    def __repr__(self): return f'Msg({self.id}: {self.frm} | {self.subj})'
+    def __repr__(self):
+        if not self.d.get('payload'): return f'Msg({self.id})'
+        return f'Msg({self.id}: {self.frm} | {self.subj}\n{self.snip})'
 
     @property
     def id(self): return self._id
@@ -62,7 +65,7 @@ class Msg:
     @property
     def label_ids(self): return L(self.d.get('labelIds',[]))
     @property
-    def snip(self): return self.d.get('snippet')
+    def snip(self): return html.unescape(self.d.get('snippet') or '')
 
     def get(self,
         fmt:str='full',           # Format: 'full', 'metadata', 'minimal', or 'raw'
@@ -95,15 +98,47 @@ class Msg:
     @property
     def refs(self):  return self.hdrs().get('references')
 
+    def _has_body(self):
+        p = self.d.get('payload',{})
+        return p.get('body') or p.get('parts')
+
     def text(self):
         "Get plain text body"
-        if not self.d.get('payload'): self.get(fmt='full')
+        if not self._has_body(): self.get(fmt='full')
         return txt_part(self.d.get('payload'))
 
-    def html(self):
-        "Get HTML body"
-        if not self.d.get('payload'): self.get(fmt='full')
-        return html_part(self.d.get('payload'))
+    def html(self,
+        clean:bool=True # strip reply quotations and signatures?
+    ):
+        "Get HTML body (optionally cleaned), falls back to text wrapped in pre"
+        if not self._has_body(): self.get(fmt='full')
+        h = html_part(self.d.get('payload'))
+        if not h:
+            t = txt_part(self.d.get('payload'))
+            h = f'<pre>{t}</pre>' if t else None
+        if not h or not clean: return h
+        soup = BeautifulSoup(h, 'html.parser')
+        for q in soup.select('.gmail_quote, .gmail_signature, .gmail_signature_prefix'): q.decompose()
+        return str(soup)
+
+    def body(self,
+        clean:bool=True # strip reply quotations and signatures?
+    ):
+        "Get (optionally cleaned) text body"
+        soup = BeautifulSoup(self.html(clean=clean), 'html.parser')
+        for br in soup.find_all('br'): br.replace_with('\n')
+        for tag in soup.find_all(['p', 'div']): tag.append('\n')
+        return re.sub(r'\n{3,}', '\n\n', soup.get_text().strip())
+
+    def _repr_html_(self):
+        h = self.hdrs()
+        parts = [f"<b>From:</b> {h.get('from','')}", f"<b>Date:</b> {h.get('date','')}",
+                 f"<b>To:</b> {h.get('to','')}"]
+        if h.get('cc'): parts.append(f"<b>Cc:</b> {h.get('cc')}")
+        if h.get('bcc'): parts.append(f"<b>Bcc:</b> {h.get('bcc')}")
+        parts.append(f"<b>Subject:</b> {h.get('subject','')}")
+        hdr = '<br>'.join(parts)
+        return f"{hdr}<hr>{self.html(True)}"
 
     def raw(self,
         refresh:bool=False  # Refresh from API?
@@ -185,6 +220,24 @@ class Msg:
         "Send a reply"
         return self.reply_draft(body=body,html=html,**kwargs).send()
 
+    def unsubscribe(self):
+        "Unsubscribe using List-Unsubscribe header (mailto or HTTP POST)"
+        h = self.hdrs()
+        unsub = h.get('list-unsubscribe')
+        if not unsub: return None
+        post_body = h.get('list-unsubscribe-post', 'List-Unsubscribe=One-Click')
+        urls = re.findall(r'<([^>]+)>', unsub)
+        for url in urls:
+            if url.startswith('mailto:'):
+                parts = url[7:].split('?', 1)
+                to = parts[0]
+                subj = dict(p.split('=',1) for p in parts[1].split('&')).get('subject','unsubscribe') if len(parts)>1 else 'unsubscribe'
+                return self.gmail.send(to=to, subj=subj, body='unsubscribe')
+            if url.startswith('http'):
+                resp = httpx.post(url, content=post_body, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+                return resp
+        return None
+
 class Thread:
     def __init__(self,gmail,id=None,d=None):
         store_attr('gmail')
@@ -193,9 +246,13 @@ class Thread:
         self._cache = {}
 
     def __repr__(self):
-        msgs = self.msgs()
-        m = msgs[0].get(fmt='metadata') if msgs else None
-        return f'Thread({self.id}: {len(msgs)} msgs, {m.frm} -> {m.to} | {m.subj})' if m else f'Thread({self.id})'
+        n = len(self.d.get('messages', []))
+        if not n: return f'Thread({self.id})'
+        m = Msg(self.gmail, d=self.d['messages'][-1])
+        if not m.d.get('snippet'): m.get(fmt='metadata')
+        return f'Thread({self.id}: {n} msgs, {m.frm} -> {m.to} | {m.subj}\n{m.snip})'
+
+    def __getitem__(self, i): return self.msgs()[i]
 
     @property
     def id(self): return self._id
@@ -383,7 +440,7 @@ class Gmail:
             except KeyError: return l
         return _uniq(L(lbls).map(_one) if is_listy(lbls) else L([lbls]).map(_one))
 
-    def msg(self,
+    def message(self,
         id:str,           # Message id
         fmt:str='full'    # Format: 'full', 'metadata', 'minimal', or 'raw'
     ):  # Fetched message
@@ -455,20 +512,19 @@ class Gmail:
         it = self._list(self._u.drafts().list,'drafts',limit=max_results,**kwargs)
         return L(it).map(lambda o: Draft(self,d=o))
 
-    @delegates(mk_email)
+    @delegates(mk_email, but=['headers','att'])
     def send(self,
-        msg=None,            # EmailMessage (or use kwargs)
         thread_id:str=None,  # Thread id to reply in
         **kwargs
-    ):  # Sent message
+    ):
         "Send email (pass `to`, `subj`, `body` etc or an EmailMessage)"
-        msg = ifnone(msg,mk_email(**kwargs))
+        msg = mk_email(**kwargs)
         body = dict(raw=raw_msg(msg))
         if thread_id: body['threadId'] = thread_id
         res = self._exec(self._u.messages().send(userId=self.user_id,body=body))
         return Msg(self,d=res)
 
-    @delegates(mk_email)
+    @delegates(mk_email, but=['headers','att'])
     def create_draft(self,
         msg=None,            # EmailMessage (or use kwargs)
         thread_id:str=None,  # Thread id to reply in
@@ -493,25 +549,24 @@ class Gmail:
         if not refs and in_reply_to: refs = in_reply_to
         return dict(to=to,subj=subj,refs=refs,in_reply_to=in_reply_to)
 
-    @delegates(mk_email)
+    @delegates(mk_email, but=['headers','att'])
     def reply_draft(self,
-        o,                   # Message/Thread object or message id
+        o:str,                   # Message/Thread object or message id
         to:str=None,         # Override recipient
         subj:str=None,       # Override subject
-        headers:dict=None,   # Additional headers dict
         thread_id:str=None,  # Override thread id
         **kwargs
-    ):  # Created reply draft
+    ):
         "Create a reply draft to message/thread"
         if isinstance(o,Thread): o = o.last()
         if not isinstance(o,Msg): o = Msg(self,id=o)
         o.get(fmt='metadata')
         rh = self._reply_headers(o,to=to,subj=subj)
-        h = dict(headers or {})
+        h = {}
         if rh['in_reply_to']: h['In-Reply-To'] = rh['in_reply_to']
         if rh['refs']:        h['References'] = rh['refs']
         t_id = ifnone(thread_id,o.thread_id)
-        msg = mk_email(to=rh['to'],subj=rh['subj'],headers=h,**kwargs)
+        msg = mk_email(to=rh['to'], subj=rh['subj'], headers=h, **kwargs)
         return self.create_draft(msg=msg,thread_id=t_id)
 
     def reply_to_thread(self,
@@ -563,4 +618,68 @@ class Gmail:
     ):  # List of trashed messages
         "Move messages to trash"
         return L(ids).map(_as_id).map(lambda i: self._exec(self._u.messages().trash(userId=self.user_id,id=i)))
+
+    def _batch_get(self, items, cls, api, fmt='metadata', callback=None):
+        results = {}
+        def _cb(id, resp, exc):
+            if exc: raise exc
+            results[id] = cls(self, d=resp)
+            if callback: callback(results[id])
+        batch = self.s.new_batch_http_request()
+        for o in items:
+            oid = o.id if hasattr(o, 'id') else o
+            batch.add(api.get(userId=self.user_id, id=oid, format=fmt), callback=_cb, request_id=oid)
+        batch.execute(http=self.s._http)
+        return L(results[o.id if hasattr(o,'id') else o] for o in items)
+
+    def get_msgs(self, msgs, fmt='metadata', callback=None):
+        "Batch fetch multiple messages"
+        return self._batch_get(msgs, Msg, self._u.messages(), fmt, callback)
+
+    def get_threads(self, threads, fmt='metadata', callback=None):
+        "Batch fetch multiple threads"
+        return self._batch_get(threads, Thread, self._u.threads(), fmt, callback)
+
+    def view_inbox(self, max_msgs=20, unread=False):
+        "Search and batch-fetch inbox messages"
+        q = 'in:inbox is:unread' if unread else 'in:inbox'
+        msgs = self.search_msgs(q, max_results=max_msgs)
+        return self.get_msgs(msgs, fmt='full')
+
+    def view_inbox_threads(self, max_threads=20, unread=False):
+        "Search and batch-fetch inbox threads"
+        q = 'in:inbox is:unread' if unread else 'in:inbox'
+        threads = self.search_threads(q, max_results=max_threads)
+        return self.get_threads(threads, fmt='full')
+
+    def view_msg(self,
+        id:str,              # Message id
+        clean:bool=True,     # Strip reply quotations and signatures?
+        as_text:bool=True,   # Return text body (vs HTML)?
+        as_json:bool=True    # Return dict (vs formatted string)?
+    ):
+        "View message body with optional headers/metadata"
+        m = self.message(id, fmt='full')
+        body = m.body(clean) if as_text else m.html(clean)
+        h = m.hdrs()
+        if not as_json:
+            parts = [f"From: {h.get('from','')}", f"Date: {h.get('date','')}", f"To: {h.get('to','')}"]
+            if h.get('cc'): parts.append(f"Cc: {h.get('cc')}")
+            if h.get('bcc'): parts.append(f"Bcc: {h.get('bcc')}")
+            parts.append(f"Subject: {h.get('subject','')}")
+            return '\n'.join(parts) + '\n\n' + body
+        return dict(id=m.id, thread_id=m.thread_id, frm=h.get('from'), to=h.get('to'),
+                    cc=h.get('cc'), date=h.get('date'), subject=h.get('subject'), body=body)
+
+    def view_thread(self,
+        id:str,              # Thread id
+        clean:bool=True,     # Strip reply quotations and signatures?
+        as_text:bool=True,   # Return text body (vs HTML)?
+        as_json:bool=True    # Return dict (vs formatted string)?
+    ):
+        "View thread messages with optional headers/metadata"
+        t = self.thread(id, fmt='full')
+        res = {m.id: self.view_msg(m.id, clean=clean, as_text=as_text, as_json=as_json) for m in t.msgs()}
+        if as_json: return res
+        return ('\n\n' + '='*60 + '\n\n').join(res.values())
 

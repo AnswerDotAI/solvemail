@@ -94,8 +94,39 @@ m.rm_labels('INBOX')            # Remove labels
 ```python
 t = thread(id)        # Fetch by id
 t.msgs()                        # List messages
+t[0], t[-1]                     # Index into messages
 t.reply_draft(body='...')       # Create reply draft
 t.reply(body='...')             # Send reply directly
+
+# Batch fetch multiple threads efficiently (one HTTP call)
+threads = search_threads('in:inbox', max_results=50)
+threads = get_threads(threads)
+```
+
+### Message display
+
+Messages render nicely in Jupyter notebooks (quotes and signatures stripped automatically).
+
+```python
+m = t[-1]
+m.body()   # Cleaned text (no quotes/signatures)
+m.html()   # HTML body (falls back to text wrapped in <pre>)
+
+# View message with headers (as dict or plain text)
+view_msg(m.id)                      # Returns dict with headers + body
+view_msg(m.id, as_json=False)       # Returns formatted text
+
+# View full thread
+view_thread(t.id)                   # Dict of msgid -> msg dict
+view_thread(t.id, as_json=False)    # Concatenated text with separators
+```
+
+### Inbox helpers
+
+```python
+view_inbox(max_msgs=20)             # Batch fetch inbox messages
+view_inbox_threads(max_threads=20)  # Batch fetch inbox threads
+view_inbox(unread=True)             # Only unread
 ```
 
 ### Labels
@@ -124,6 +155,9 @@ batch_label(ids, add=['SPAM'], rm=['INBOX'])
 
 # Trash multiple messages
 trash_msgs(ids)
+
+# Permanently delete (requires full mail scope)
+batch_delete(ids)
 ```
 
 ## Using the Gmail class directly
