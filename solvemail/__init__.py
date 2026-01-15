@@ -16,8 +16,12 @@ def _proxy(name):
     def fn(*a, **kw): return getattr(g(), name)(*a, **kw)
     return fn
 
-for _k in dir(Gmail):
-    if not _k.startswith('_'): globals()[_k] = _proxy(_k)
+def refresh_solvemail():
+    "Reload Gmail methods"
+    for _k in dir(Gmail):
+        if callable(getattr(Gmail, _k)) and not _k.startswith('_'): globals()[_k] = _proxy(_k)
+
+refresh_solvemail()
 
 def init(creds=None, creds_path='credentials.json', token_path='token.json', scopes=None, user_id='me', interactive=True, **kwargs):
     "Create a global `Gmail` client using `creds_path`/`token_path` and `scopes`"
@@ -29,5 +33,4 @@ def g():
     if _g is None: raise AttributeError('Call solvemail.init(...) first')
     return _g
 
-def solvemail_tools(): return '&`[search_threads, search_msgs, thread, draft, drafts, labels, label, find_labels, profile, send, reply_draft, reply_to_thread, create_label, trash_msgs, view_inbox, view_inbox_threads, view_msg, view_thread, batch_delete, batch_label, message]`'
-
+def solvemail_tools(): return '&`[search_threads, search_msgs, thread, draft, drafts, labels, label, find_labels, profile, send, reply_draft, reply_to_thread, create_label, trash_msgs, view_inbox, view_inbox_threads, view_msg, view_thread, batch_delete, batch_label, message, send_drafts, report_spam]`'

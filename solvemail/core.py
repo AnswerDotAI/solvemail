@@ -317,7 +317,12 @@ class Draft:
         self.d = d or {}
         self._id = ifnone(id,self.d.get('id'))
 
-    def __repr__(self): return f'Draft({self.id})'
+    def __repr__(self):
+        if not self.d.get('message'): return f'Draft({self.id})'
+        m = self.msg
+        if m and not m.d.get('payload'): m.get(fmt='metadata')
+        if not m: return f'Draft({self.id})'
+        return f'Draft({self.id}: {m.to} | {m.subj}\n{m.snip})'
     @property
     def id(self): return self._id
     @property
@@ -619,6 +624,12 @@ class Gmail:
         "Move messages to trash"
         return L(ids).map(_as_id).map(lambda i: self._exec(self._u.messages().trash(userId=self.user_id,id=i)))
 
+    def report_spam(self,
+        ids:list  # Message ids to report as spam
+    ):
+        "Report messages as spam"
+        return self.batch_label(ids, add=['SPAM'], rm=['INBOX'])
+
     def _batch_get(self, items, cls, api, fmt='metadata', callback=None):
         results = {}
         def _cb(id, resp, exc):
@@ -631,6 +642,12 @@ class Gmail:
             batch.add(api.get(userId=self.user_id, id=oid, format=fmt), callback=_cb, request_id=oid)
         batch.execute(http=self.s._http)
         return L(results[o.id if hasattr(o,'id') else o] for o in items)
+
+    def send_drafts(self,
+        ids: str|list[str] # id(s) of drafts to send
+    ):
+        "Send one or more drafts by id"
+        return L(listify(ids)).map(lambda i: self.draft(i).send())
 
     def get_msgs(self, msgs, fmt='metadata', callback=None):
         "Batch fetch multiple messages"
@@ -658,7 +675,7 @@ class Gmail:
         as_text:bool=True,   # Return text body (vs HTML)?
         as_json:bool=True    # Return dict (vs formatted string)?
     ):
-        "View message body with optional headers/metadata"
+        "View message body with optional headers/metadata. This is primarily for LLM and programmatic use. Humans use `message()` to get HTML view."
         m = self.message(id, fmt='full')
         body = m.body(clean) if as_text else m.html(clean)
         h = m.hdrs()
@@ -677,7 +694,7 @@ class Gmail:
         as_text:bool=True,   # Return text body (vs HTML)?
         as_json:bool=True    # Return dict (vs formatted string)?
     ):
-        "View thread messages with optional headers/metadata"
+        "View thread messages with optional headers/metadata. This is primarily for LLM and programmatic use. Humans use `thread()` to get HTML view."
         t = self.thread(id, fmt='full')
         res = {m.id: self.view_msg(m.id, clean=clean, as_text=as_text, as_json=as_json) for m in t.msgs()}
         if as_json: return res
