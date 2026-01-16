@@ -363,10 +363,10 @@ class Draft:
 
 class Gmail:
     def __init__(self, creds=None, creds_path='credentials.json', token_path='token.json', scopes=None,
-                 user_id='me', interactive=True, retries=3):
-        "Gmail client using OAuth `creds` or `creds_path`/`token_path`"
+                 user_id='me', interactive=True, retries=3, flow='auto'):
+        "Gmail client using OAuth `creds` or `creds_path`/`token_path`. `flow` can be 'auto', 'browser', or 'console'"
         if creds is None:
-            creds = oauth_creds(creds_path=creds_path, token_path=token_path, scopes=ifnone(scopes, df_scopes), interactive=interactive)
+            creds = oauth_creds(creds_path=creds_path, token_path=token_path, scopes=ifnone(scopes, df_scopes), interactive=interactive, flow=flow)
         store_attr()
         self.s = gmail_service(creds)
         self._u = self.s.users()
