@@ -25,11 +25,11 @@ def browser_available():
     try: webbrowser.get(); return True
     except webbrowser.Error: return False
 
-def oauth_creds(creds_path='credentials.json',token_path='token.json',scopes=None,interactive=True,redirect_uri=None):
+def oauth_creds(creds_path='credentials.json', token_path='token.json', scopes=None, interactive=True, redirect_uri=None):
     "OAuth creds from `creds_path`/`token_path` for `scopes`"
-    scopes = ifnone(scopes,df_scopes)
+    scopes = ifnone(scopes, df_scopes)
     creds_path,token_path = Path(creds_path),Path(token_path)
-    creds = Credentials.from_authorized_user_file(str(token_path),scopes) if token_path.exists() else None
+    creds = Credentials.from_authorized_user_file(str(token_path), scopes) if token_path.exists() else None
     if creds and creds.valid: return creds
     if creds and creds.expired and creds.refresh_token:
         creds.refresh(Request())
@@ -37,16 +37,20 @@ def oauth_creds(creds_path='credentials.json',token_path='token.json',scopes=Non
         return creds
     if not interactive: raise ValueError('Missing or invalid token, and `interactive=False`')
     if browser_available() and not redirect_uri:
-        auth_flow = InstalledAppFlow.from_client_secrets_file(str(creds_path),scopes=scopes)
+        auth_flow = InstalledAppFlow.from_client_secrets_file(str(creds_path), scopes=scopes)
         creds = auth_flow.run_local_server()
     else:
-        auth_flow = Flow.from_client_secrets_file(str(creds_path),scopes=scopes)
-        auth_flow.redirect_uri = ifnone(redirect_uri,'http://localhost/')
-        auth_url,_ = auth_flow.authorization_url()
-        print(f'Authorize here: {auth_url}')
+        auth_flow = Flow.from_client_secrets_file(str(creds_path), scopes=scopes)
+        auth_flow.redirect_uri = ifnone(redirect_uri, 'http://localhost/')
+        auth_url, _ = auth_flow.authorization_url()
+        if IN_NOTEBOOK:
+            from IPython.display import display, HTML
+            handle = display(HTML(f'<a href="{auth_url}" target="_blank">Click to authorize</a>'), display_id=True)
+        else: print(f'Authorize here: {auth_url}')
         code = input("Paste the code: ")
         auth_flow.fetch_token(code=code)
         creds = auth_flow.credentials
+        if IN_NOTEBOOK: handle.update(HTML('<b>Auth complete</b>'))
     token_path.write_text(creds.to_json())
     return creds
 
