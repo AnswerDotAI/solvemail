@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -e
+
+bump=${1:-patch}
+hatch version $bump
+version=$(hatch version)
+git add solvemail/__init__.py && git commit -m "v$version"
+git push
+gh release create "v$version" --generate-notes
+hatch build
+hatch publish
