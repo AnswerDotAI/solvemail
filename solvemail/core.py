@@ -56,7 +56,8 @@ class Msg:
 
     def __repr__(self):
         if not self.d.get('payload'): return f'Msg({self.id})'
-        return f'Msg({self.id}: {self.frm} | {self.subj}\n{self.snip})'
+        lbls = ','.join(self.label_ids) if self.label_ids else ''
+        return f'Msg({self.id}: [{lbls}] {self.frm} | {self.subj}\n{self.snip})'
 
     @property
     def id(self): return self._id
@@ -118,7 +119,10 @@ class Msg:
             h = f'<pre>{t}</pre>' if t else None
         if not h or not clean: return h
         soup = BeautifulSoup(h, 'html.parser')
-        for q in soup.select('.gmail_quote, .gmail_signature, .gmail_signature_prefix'): q.decompose()
+        for sig in soup.select('.gmail_signature, .gmail_signature_prefix'): sig.decompose()
+        for q in soup.select('.gmail_quote'):
+            prev = q.find_previous_sibling()
+            if prev and prev.get_text(strip=True): q.decompose()
         return str(soup)
 
     def body(self,
@@ -250,7 +254,8 @@ class Thread:
         if not n: return f'Thread({self.id})'
         m = Msg(self.gmail, d=self.d['messages'][-1])
         if not m.d.get('snippet'): m.get(fmt='metadata')
-        return f'Thread({self.id}: {n} msgs, {m.frm} -> {m.to} | {m.subj}\n{m.snip})'
+        lbls = ','.join(m.label_ids) if m.label_ids else ''
+        return f'Thread({self.id}: {n} msgs, [{lbls}] {m.frm} -> {m.to} | {m.subj}\n{m.snip})'
 
     def __getitem__(self, i): return self.msgs()[i]
 
@@ -631,15 +636,19 @@ class Gmail:
         return self.batch_label(ids, add=['SPAM'], rm=['INBOX'])
 
     def _batch_get(self, items, cls, api, fmt='metadata', callback=None):
-        results = {}
+        import uuid
+        results,id_map = {},{}
         def _cb(id, resp, exc):
             if exc: raise exc
-            results[id] = cls(self, d=resp)
-            if callback: callback(results[id])
+            orig_id = id_map[id]
+            results[orig_id] = cls(self, d=resp)
+            if callback: callback(results[orig_id])
         batch = self.s.new_batch_http_request()
         for o in items:
             oid = o.id if hasattr(o, 'id') else o
-            batch.add(api.get(userId=self.user_id, id=oid, format=fmt), callback=_cb, request_id=oid)
+            uid = f"{oid}_{uuid.uuid4().hex[:8]}"
+            id_map[uid] = oid
+            batch.add(api.get(userId=self.user_id, id=oid, format=fmt), callback=_cb, request_id=uid)
         batch.execute(http=self.s._http)
         return L(results[o.id if hasattr(o,'id') else o] for o in items)
 
@@ -668,6 +677,23 @@ class Gmail:
         q = 'in:inbox is:unread' if unread else 'in:inbox'
         threads = self.search_threads(q, max_results=max_threads)
         return self.get_threads(threads, fmt='full')
+
+    def view_msgs(self,
+        ids:list,            # Message ids to fetch
+        fmt:str='metadata'   # Format: 'full', 'metadata', or 'minimal'
+    ):
+        "Batch fetch messages and return summary dicts"
+        msgs = self.get_msgs(ids, fmt=fmt)
+        return [{'id': m.id, 'thread_id': m.thread_id, 'frm': m.frm, 'to': m.to, 'subject': m.subj, 'snippet': m.snip} for m in msgs]
+
+    def view_threads(self,
+        ids:list,            # Thread ids to fetch
+        fmt:str='metadata'   # Format: 'full', 'metadata', or 'minimal'
+    ):
+        "Batch fetch threads and return summary with message list"
+        threads = self.get_threads(ids, fmt=fmt)
+        return [{'id': t.id, 'msgs': [{'id': m.id, 'frm': m.frm, 'to': m.to, 'subject': m.subj,
+                  'snippet': m.snip, 'labels': list(m.label_ids)} for m in t.msgs()]} for t in threads]
 
     def view_msg(self,
         id:str,              # Message id
