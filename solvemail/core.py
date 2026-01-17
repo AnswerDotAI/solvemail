@@ -491,29 +491,33 @@ class Gmail:
         q:str=None,                     # Gmail search query (e.g. 'is:unread from:foo')
         label_ids:list=None,            # Filter by label ids/names
         max_results:int=50,             # Max messages to return (None for all)
-        include_spam_trash:bool=False   # Include spam/trash?
-    ):  # List of Msg objects
-        "Search messages using Gmail query"
+        include_spam_trash:bool=False,  # Include spam/trash?
+        fmt:str=None                    # Format: 'full', 'metadata', 'minimal' (None for ids only; use 'metadata' for snippets)
+    ):
+        "Search messages using Gmail query; set fmt='metadata' or 'full' to batch-fetch and see snippets/bodies"
         page_sz = min(max_results,500) if max_results else 500
         kwargs = dict(userId=self.user_id,maxResults=page_sz,includeSpamTrash=include_spam_trash)
         if q: kwargs['q'] = q
         if label_ids: kwargs['labelIds'] = self.lbl_ids(label_ids)
         it = self._list(self._u.messages().list,'messages',limit=max_results,**kwargs)
-        return L(it).map(lambda o: Msg(self,d=o))
+        msgs = L(it).map(lambda o: Msg(self,d=o))
+        return self.get_msgs(msgs, fmt=fmt) if fmt else msgs
 
     def search_threads(self,
         q:str=None,                     # Gmail search query (e.g. 'is:unread from:foo')
         label_ids:list=None,            # Filter by label ids/names
         max_results:int=50,             # Max threads to return (None for all)
-        include_spam_trash:bool=False   # Include spam/trash?
-    ):  # List of Thread objects
-        "Search threads using Gmail query"
+        include_spam_trash:bool=False,  # Include spam/trash?
+        fmt:str=None                    # Format: 'full', 'metadata', 'minimal' (None for ids only; use 'metadata' for snippets)
+    ):
+        "Search threads using Gmail query; set fmt='metadata' or 'full' to batch-fetch and see snippets/bodies"
         page_sz = min(max_results,500) if max_results else 500
         kwargs = dict(userId=self.user_id,maxResults=page_sz,includeSpamTrash=include_spam_trash)
         if q: kwargs['q'] = q
         if label_ids: kwargs['labelIds'] = self.lbl_ids(label_ids)
         it = self._list(self._u.threads().list,'threads',limit=max_results,**kwargs)
-        return L(it).map(lambda o: Thread(self,d=o))
+        threads = L(it).map(lambda o: Thread(self,d=o))
+        return self.get_threads(threads, fmt=fmt) if fmt else threads
 
     def drafts(self,
         q:str=None,          # Gmail search query
@@ -538,7 +542,6 @@ class Gmail:
         res = self._exec(self._u.messages().send(userId=self.user_id,body=body))
         return Msg(self,d=res)
 
-    @delegates(mk_email, but=['headers','att'])
     def _create_draft(self, msg, thread_id:str=None):
         "Create a draft from an EmailMessage"
         body = dict(message=dict(raw=raw_msg(msg)))
@@ -566,7 +569,7 @@ class Gmail:
         att = att + [tup(p) for p in m.att_parts()]
         return mk_email(body=body, subj=subj or f"Fwd: {m.subj}", html=html, att=att, **kwargs)
 
-    @delegates(mk_email, but=['html', 'body', 'msg'])
+    @delegates(mk_email, but=['html', 'body', 'msg', 'headers'])
     def create_draft(self, body:str=None, subj:str=None, thread_id:str=None, fwd_msg_id:str=None, att:list=None, **kwargs):
         "Create a draft (body is markdown)"
         att = list(att or [])
@@ -588,7 +591,7 @@ class Gmail:
         if not refs and in_reply_to: refs = in_reply_to
         return dict(to=to,subj=subj,refs=refs,in_reply_to=in_reply_to)
 
-    @delegates(create_draft, but=['fwd_msg_id', 'subj', 'thread_id'])
+    @delegates(create_draft, but=['fwd_msg_id', 'subj', 'thread_id', 'headers'])
     def reply_draft(self, o:str, to:str=None, subj:str=None, body:str=None, thread_id:str=None, **kwargs):
         "Create a reply draft for message/thread `o`"
         t = self.thread(o, fmt='metadata') if isinstance(o, str) else o
@@ -658,22 +661,28 @@ class Gmail:
         "Report messages as spam"
         return self.batch_label(ids, add=['SPAM'], rm=['INBOX'])
 
-    def _batch_get(self, items, cls, api, fmt='metadata', callback=None):
+    def _chunk_get(self, chunk, cls, api, fmt, callback, sleep_before=0):
         import uuid
+        if sleep_before: time.sleep(sleep_before)
         results,id_map = {},{}
         def _cb(id, resp, exc):
             if exc: raise exc
-            orig_id = id_map[id]
-            results[orig_id] = cls(self, d=resp)
-            if callback: callback(results[orig_id])
+            results[id_map[id]] = cls(self, d=resp)
+            if callback: callback(results[id_map[id]])
         batch = self.s.new_batch_http_request()
-        for o in items:
+        for o in chunk:
             oid = o.id if hasattr(o, 'id') else o
             uid = f"{oid}_{uuid.uuid4().hex[:8]}"
             id_map[uid] = oid
             batch.add(api.get(userId=self.user_id, id=oid, format=fmt), callback=_cb, request_id=uid)
         batch.execute(http=self.s._http)
-        return L(results[o.id if hasattr(o,'id') else o] for o in items)
+        return results
+
+    def _batch_get(self, items, cls, api, fmt='metadata', callback=None, chunk_sz=10, delay=0.1):
+        all_results = {}
+        for i,chunk in enumerate(chunked(items, chunk_sz)):
+            all_results |= self._chunk_get(chunk, cls, api, fmt, callback, delay if i else 0)
+        return L(all_results[o.id if hasattr(o,'id') else o] for o in items)
 
     def send_drafts(self,
         ids: str|list[str] # id(s) of drafts to send
