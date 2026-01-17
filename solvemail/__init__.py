@@ -42,7 +42,7 @@ def g():
     if _g is None: raise AttributeError('Call solvemail.init(...) first')
     return _g
 
-def solvemail_tools(): return '&`[search_threads, search_msgs, thread, draft, drafts, labels, label, find_labels, profile, send, reply_draft, reply_to_thread, create_label, trash_msgs, view_inbox, view_inbox_threads, view_msg, view_thread, batch_delete, batch_label, message, send_drafts, report_spam]`'
+def solvemail_tools(): return '&`[search_threads, search_msgs, thread, draft, drafts, labels, label, find_labels, profile, send, reply_draft, reply_to_thread, create_label, trash_msgs, view_inbox, view_inbox_threads, view_msg, view_thread, batch_delete, batch_label, create_draft, message, send_drafts, report_spam]`'
 
 def wait_secs(secs: float = 1.0):
     "Pause for `secs` seconds; use if rate limited"
