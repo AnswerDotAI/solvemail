@@ -5,7 +5,7 @@ bump=${1:-patch}
 hatch version $bump >/dev/null 2>&1
 version=$(grep -oP '__version__ = "\K[^"]+' solvemail/__init__.py)
 echo "Releasing v$version"
-git add solvemail/__init__.py && git commit -m "v$version"
-git push
+git add solvemail/__init__.py && git commit -q -m "v$version"
+git push -q --no-progress
 gh release create "v$version" --generate-notes
 rm -rf dist/* && python -m build && twine upload dist/*
