@@ -160,20 +160,6 @@ trash_msgs(ids)
 batch_delete(ids)
 ```
 
-## Using the Gmail class directly
-
-```python
-from solvemail import Gmail
-
-g = Gmail(creds_path='credentials.json', token_path='token.json')
-lbl = g.create_label('test-label')
-
-m = g.send(to=g.profile().email, subj='hello', body='hi there')
-m.add_labels(lbl)
-
-lbl.delete()
-```
-
 ## Testing
 
 Set these env vars to run e2e tests against a throwaway Gmail/Workspace account:

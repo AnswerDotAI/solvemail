@@ -3,7 +3,7 @@ from fastcore.meta import *
 import re,time,html,httpx
 from bs4 import BeautifulSoup
 from googleapiclient.errors import HttpError
-from .auth import oauth_creds,gmail_service,df_scopes
+from .auth import gmail_service
 from .msg import b64d,mk_email,raw_msg,parse_raw,hdrs_dict,att_parts,txt_part,html_part
 
 __all__ = ['Gmail','Label','Msg','Thread','Draft']
@@ -367,11 +367,8 @@ class Draft:
         return Msg(self.gmail,d=res)
 
 class Gmail:
-    def __init__(self, creds=None, creds_path='credentials.json', token_path='token.json', scopes=None,
-                 user_id='me', interactive=True, retries=3, flow='auto'):
-        "Gmail client using OAuth `creds` or `creds_path`/`token_path`. `flow` can be 'auto', 'browser', or 'console'"
-        if creds is None:
-            creds = oauth_creds(creds_path=creds_path, token_path=token_path, scopes=ifnone(scopes, df_scopes), interactive=interactive, flow=flow)
+    def __init__(self, creds, user_id='me', retries=3):
+        "Gmail client using OAuth `creds`"
         store_attr()
         self.s = gmail_service(creds)
         self._u = self.s.users()

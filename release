@@ -7,5 +7,4 @@ version=$(hatch version)
 git add solvemail/__init__.py && git commit -m "v$version"
 git push
 gh release create "v$version" --generate-notes
-hatch build
-hatch publish
+rm -rf dist/* && python -m build && twine upload dist/*
