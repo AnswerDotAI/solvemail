@@ -42,7 +42,7 @@ def oauth_creds(creds_path='credentials.json', token_path='token.json', scopes=N
     else:
         auth_flow = Flow.from_client_secrets_file(str(creds_path), scopes=scopes)
         auth_flow.redirect_uri = ifnone(redirect_uri, 'http://localhost/')
-        auth_url, _ = auth_flow.authorization_url()
+        auth_url, _ = auth_flow.authorization_url(access_type='offline', prompt='consent')
         if IN_NOTEBOOK:
             from IPython.display import display, HTML
             handle = display(HTML(f'<a href="{auth_url}" target="_blank">Click to authorize</a>'), display_id=True)
