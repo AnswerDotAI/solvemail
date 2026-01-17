@@ -1,3 +1,5 @@
+credentials.json
+*tok*.json
 _proc/
 sidebar.yml
 Gemfile.lock

@@ -1,6 +1,6 @@
 from fastcore.utils import *
 from fastcore.meta import *
-import re,time,html,httpx
+import re,time,html,httpx,mistletoe
 from bs4 import BeautifulSoup
 from googleapiclient.errors import HttpError
 from .auth import gmail_service
@@ -57,7 +57,8 @@ class Msg:
     def __repr__(self):
         if not self.d.get('payload'): return f'Msg({self.id})'
         lbls = ','.join(self.label_ids) if self.label_ids else ''
-        return f'Msg({self.id}: [{lbls}] {self.frm} | {self.subj}\n{self.snip})'
+        att = '📎' if self.has_att else ''
+        return f'Msg({self.id}: [{lbls}] {att}{self.frm} | {self.subj}\n{self.snip})'
 
     @property
     def id(self): return self._id
@@ -67,6 +68,10 @@ class Msg:
     def label_ids(self): return L(self.d.get('labelIds',[]))
     @property
     def snip(self): return html.unescape(self.d.get('snippet') or '')
+    @property
+    def has_att(self):
+        if not self.d.get('payload'): return None
+        return self.d['payload'].get('mimeType') == 'multipart/mixed'
 
     def get(self,
         fmt:str='full',           # Format: 'full', 'metadata', 'minimal', or 'raw'
@@ -141,6 +146,8 @@ class Msg:
         if h.get('cc'): parts.append(f"<b>Cc:</b> {h.get('cc')}")
         if h.get('bcc'): parts.append(f"<b>Bcc:</b> {h.get('bcc')}")
         parts.append(f"<b>Subject:</b> {h.get('subject','')}")
+        atts = self.att_parts()
+        if atts: parts.append(f"<b>📎 Attachments:</b> {', '.join(p.get('filename') for p in atts)}")
         hdr = '<br>'.join(parts)
         return f"{hdr}<hr>{self.html(True)}"
 
@@ -532,17 +539,42 @@ class Gmail:
         return Msg(self,d=res)
 
     @delegates(mk_email, but=['headers','att'])
-    def create_draft(self,
-        msg=None,            # EmailMessage (or use kwargs)
-        thread_id:str=None,  # Thread id to reply in
-        **kwargs
-    ):  # Created draft
-        "Create a draft (pass `to`, `subj`, `body` etc or an EmailMessage)"
-        msg = ifnone(msg,mk_email(**kwargs))
+    def _create_draft(self, msg, thread_id:str=None):
+        "Create a draft from an EmailMessage"
         body = dict(message=dict(raw=raw_msg(msg)))
         if thread_id: body['message']['threadId'] = thread_id
-        res = self._exec(self._u.drafts().create(userId=self.user_id,body=body))
-        return Draft(self,d=res)
+        res = self._exec(self._u.drafts().create(userId=self.user_id, body=body))
+        return Draft(self, d=res)
+
+    def _fwd_body(self, fwd_msg_id, body, subj, att, **kwargs):
+        "Build forwarded message as EmailMessage"
+        m = self.message(fwd_msg_id, fmt='full')
+        h = m.hdrs()
+        fwd_hdr = f"""
+
+---------- Forwarded message ---------
+
+**From:** {h.get('from')}  
+**Date:** {h.get('date')}  
+**Subject:** {m.subj}  
+**To:** {h.get('to')}
+
+"""
+        body = (body or '') + fwd_hdr
+        html = mistletoe.markdown(body) + (m.html(clean=False) or f"<pre>{m.text()}</pre>")
+        def tup(p): return (p.get('filename'), m.att(p), p.get('mimeType', 'application/octet-stream'))
+        att = att + [tup(p) for p in m.att_parts()]
+        return mk_email(body=body, subj=subj or f"Fwd: {m.subj}", html=html, att=att, **kwargs)
+
+    @delegates(mk_email, but=['html', 'body', 'msg'])
+    def create_draft(self, body:str=None, subj:str=None, thread_id:str=None, fwd_msg_id:str=None, att:list=None, **kwargs):
+        "Create a draft (body is markdown)"
+        att = list(att or [])
+        if fwd_msg_id: msg = self._fwd_body(fwd_msg_id, body, subj, att, **kwargs)
+        else:
+            html = mistletoe.markdown(body) if body else None
+            msg = mk_email(body=body or '', subj=subj, html=html, att=att, **kwargs)
+        return self._create_draft(msg, thread_id)
 
     def _reply_headers(self,m,to=None,subj=None,refs=None,in_reply_to=None):
         h = m.hdrs()
@@ -556,25 +588,19 @@ class Gmail:
         if not refs and in_reply_to: refs = in_reply_to
         return dict(to=to,subj=subj,refs=refs,in_reply_to=in_reply_to)
 
-    @delegates(mk_email, but=['headers','att'])
-    def reply_draft(self,
-        o:str,                   # Message/Thread object or message id
-        to:str=None,         # Override recipient
-        subj:str=None,       # Override subject
-        thread_id:str=None,  # Override thread id
-        **kwargs
-    ):
-        "Create a reply draft to message/thread"
-        if isinstance(o,Thread): o = o.last()
-        if not isinstance(o,Msg): o = Msg(self,id=o)
-        o.get(fmt='metadata')
-        rh = self._reply_headers(o,to=to,subj=subj)
-        h = {}
-        if rh['in_reply_to']: h['In-Reply-To'] = rh['in_reply_to']
-        if rh['refs']:        h['References'] = rh['refs']
-        t_id = ifnone(thread_id,o.thread_id)
-        msg = mk_email(to=rh['to'], subj=rh['subj'], headers=h, **kwargs)
-        return self.create_draft(msg=msg,thread_id=t_id)
+    @delegates(create_draft, but=['fwd_msg_id', 'subj', 'thread_id'])
+    def reply_draft(self, o:str, to:str=None, subj:str=None, body:str=None, thread_id:str=None, **kwargs):
+        "Create a reply draft for message/thread `o`"
+        t = self.thread(o, fmt='metadata') if isinstance(o, str) else o
+        if isinstance(t, Msg): t = self.thread(t.thread_id, fmt='metadata')
+        last = t.msgs()[-1]
+        rh = self._reply_headers(last, to=to, subj=subj)
+        html = mistletoe.markdown(body) if body else None
+        headers = {}
+        if rh['in_reply_to']: headers['In-Reply-To'] = rh['in_reply_to']
+        if rh['refs']: headers['References'] = rh['refs']
+        msg = mk_email(to=rh['to'], subj=rh['subj'], body=body or '', html=html, headers=headers, **kwargs)
+        return self._create_draft(msg, thread_id or t.id)
 
     def reply_to_thread(self,
         thread_id:str,       # Thread id to reply to
@@ -702,14 +728,16 @@ class Gmail:
         m = self.message(id, fmt='full')
         body = m.body(clean) if as_text else m.html(clean)
         h = m.hdrs()
+        atts = [dict(filename=p.get('filename'), mime=p.get('mimeType')) for p in m.att_parts()]
         if not as_json:
             parts = [f"From: {h.get('from','')}", f"Date: {h.get('date','')}", f"To: {h.get('to','')}"]
             if h.get('cc'): parts.append(f"Cc: {h.get('cc')}")
             if h.get('bcc'): parts.append(f"Bcc: {h.get('bcc')}")
             parts.append(f"Subject: {h.get('subject','')}")
+            if atts: parts.append(f"Attachments: {', '.join(a['filename'] for a in atts)}")
             return '\n'.join(parts) + '\n\n' + body
         return dict(id=m.id, thread_id=m.thread_id, frm=h.get('from'), to=h.get('to'),
-                    cc=h.get('cc'), date=h.get('date'), subject=h.get('subject'), body=body)
+                    cc=h.get('cc'), date=h.get('date'), subject=h.get('subject'), atts=atts, body=body)
 
     def view_thread(self,
         id:str,              # Thread id
