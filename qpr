@@ -4,4 +4,4 @@
 msg="$1"; label="${2:-enhancement}"
 [[ -z "$msg" ]] && echo "Usage: qpr \"commit message\" [label]" && exit 1
 branch="pr-$(uuidgen | cut -c1-8 | tr '[:upper:]' '[:lower:]')"
-git checkout -b "$branch" && git add -A && git commit -m "$msg" && git push -u origin HEAD && gh pr create --fill --label "$label" && gh pr merge --merge --delete-branch && git checkout main && git pull
+git checkout -b "$branch" && git commit -am "$msg" && git push -u origin HEAD && gh pr create --fill --label "$label" && gh pr merge --merge --delete-branch && git checkout main && git pull
