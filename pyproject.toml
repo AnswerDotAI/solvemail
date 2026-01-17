@@ -39,3 +39,7 @@ include = ["solvemail", "tests", "README.md", "pyproject.toml"]
 addopts = "-q"
 testpaths = ["tests"]
 timeout = 120
+filterwarnings = [
+    "ignore::DeprecationWarning:httplib2.*:",
+    "ignore::pytest.PytestConfigWarning",
+]
