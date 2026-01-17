@@ -1,3 +1,5 @@
+__version__ = "0.1.2"
+
 from fastcore.utils import *
 from functools import wraps
 from inspect import signature
