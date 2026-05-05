@@ -113,8 +113,8 @@ m.body()   # Cleaned text (no quotes/signatures)
 m.html()   # HTML body (falls back to text wrapped in <pre>)
 
 # View message with headers (as dict or plain text)
-view_msg(m.id)                      # Returns dict with headers + body
-view_msg(m.id, as_json=False)       # Returns formatted text
+view_email(m.id)                    # Returns dict with headers + body
+view_email(m.id, as_json=False)     # Returns formatted text
 
 # View full thread
 view_thread(t.id)                   # Dict of msgid -> msg dict

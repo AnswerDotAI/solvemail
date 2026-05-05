@@ -710,7 +710,7 @@ class Gmail:
         threads = self.search_threads(q, max_results=max_threads)
         return self.get_threads(threads, fmt='full')
 
-    def view_msgs(self,
+    def view_emails(self,
         ids:list,            # Message ids to fetch
         fmt:str='metadata'   # Format: 'full', 'metadata', or 'minimal'
     ):
@@ -727,7 +727,7 @@ class Gmail:
         return [{'id': t.id, 'msgs': [{'id': m.id, 'frm': m.frm, 'to': m.to, 'subject': m.subj,
                   'snippet': m.snip, 'labels': list(m.label_ids)} for m in t.msgs()]} for t in threads]
 
-    def view_msg(self,
+    def view_email(self,
         id:str,              # Message id
         clean:bool=True,     # Strip reply quotations and signatures?
         as_text:bool=True,   # Return text body (vs HTML)?
@@ -756,7 +756,7 @@ class Gmail:
     ):
         "View thread messages with optional headers/metadata. This is primarily for LLM and programmatic use. Humans use `thread()` to get HTML view."
         t = self.thread(id, fmt='full')
-        res = {m.id: self.view_msg(m.id, clean=clean, as_text=as_text, as_json=as_json) for m in t.msgs()}
+        res = {m.id: self.view_email(m.id, clean=clean, as_text=as_text, as_json=as_json) for m in t.msgs()}
         if as_json: return res
         return ('\n\n' + '='*60 + '\n\n').join(res.values())
 
