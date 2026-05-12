@@ -6,7 +6,7 @@ from email import policy
 from email.parser import BytesParser
 from email.utils import formatdate,make_msgid
 
-__all__ = ['b64e','b64d','mk_email','raw_msg','parse_raw','hdrs_dict','walk_parts','txt_part','html_part','att_parts']
+__all__ = ['b64e','b64d','mk_email','raw_email','parse_raw','hdrs_dict','walk_parts','txt_part','html_part','att_parts']
 
 def b64e(b):
     "Base64url encode `b` (bytes or str) without padding"
@@ -31,10 +31,10 @@ def mk_email(
     frm:str=None,      # From address
     reply_to:str=None, # Reply-To address
     headers:dict=None, # Additional headers dict
-    msgid:str=None,    # Message-ID header
+    rfcid:str=None,    # RFC Message-ID header
     date:bool=True,    # Include Date header?
     att:list[str]=None      # Attachments
-) -> EmailMessage:     # Constructed email message
+) -> EmailMessage:     # Constructed EmailMessage
     "Create an `EmailMessage` from `to`,`subj`,`body`,`html`"
     m = EmailMessage()
     if frm:      m['From'] = frm
@@ -44,7 +44,7 @@ def mk_email(
     if reply_to: m['Reply-To'] = reply_to
     if subj:     m['Subject'] = subj
     if date:     m['Date'] = formatdate(localtime=True)
-    m['Message-ID'] = msgid or make_msgid()
+    m['Message-ID'] = rfcid or make_msgid()
     for k,v in (headers or {}).items(): m[k] = v
     body = ifnone(body,'')
     m.set_content(body)
@@ -68,7 +68,7 @@ def _add_att(m,a):
     maintype,subtype = mt.split('/',1)
     m.add_attachment(data,maintype=maintype,subtype=subtype,filename=fn)
 
-def raw_msg(m): return b64e(m.as_bytes())
+def raw_email(email): return b64e(email.as_bytes())
 def parse_raw(raw): return BytesParser(policy=policy.default).parsebytes(b64d(raw))
 def hdrs_dict(hdrs): return {h['name'].lower():h['value'] for h in (hdrs or [])}
 
@@ -95,4 +95,3 @@ def html_part(p):
 def att_parts(p):
     "Return attachment parts from `payload`"
     return L(walk_parts(p)).filter(lambda o: o.get('filename') and o.get('body',{}).get('attachmentId'))
-

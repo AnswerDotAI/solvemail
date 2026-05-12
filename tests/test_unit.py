@@ -1,5 +1,5 @@
 from fastcore.test import test_eq as eq
-from solvemail.msg import b64e,b64d,mk_email,raw_msg,parse_raw
+from solvemail.email import b64e,b64d,mk_email,raw_email,parse_raw
 
 def test_b64_roundtrip():
     b = b'abc123\x00\xff'
@@ -7,6 +7,6 @@ def test_b64_roundtrip():
 
 def test_email_roundtrip():
     m = mk_email(to='a@example.com',subj='s',body='hi',html='<b>hi</b>')
-    m2 = parse_raw(raw_msg(m))
+    m2 = parse_raw(raw_email(m))
     eq(m2['To'],'a@example.com')
     eq(m2['Subject'],'s')
