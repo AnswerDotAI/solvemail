@@ -171,6 +171,9 @@ Set these env vars to run e2e tests against a throwaway Gmail/Workspace account:
 ```bash
 pytest -q
 ```
+## Development
+
+This is a fastship project. Use `ship-*` commands to manage.
 
 ## Credits
 
