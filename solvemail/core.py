@@ -355,7 +355,7 @@ class Draft:
     @delegates(mk_email)
     def update(self,email=None,thread_id=None,**kwargs):
         "Update this draft with `email` (EmailMessage) or build from kwargs"
-        if email is None: email = mk_email(**kwargs)
+        email = ifnone(email,mk_email(**kwargs))
         body = dict(message=dict(raw=raw_email(email)))
         if thread_id or self.thread_id: body['message']['threadId'] = ifnone(thread_id,self.thread_id)
         self.d = self.gmail._exec(self.gmail._u.drafts().update(userId=self.gmail.user_id,id=self.id,body=body))
@@ -367,7 +367,7 @@ class Draft:
         sys.audit('solvemail.senddraft', self.id)
         body = dict(id=self.id)
         if email or kwargs:
-            if email is None: email = mk_email(**kwargs)
+            email = ifnone(email,mk_email(**kwargs))
             body['message'] = dict(raw=raw_email(email))
             if thread_id or self.thread_id: body['message']['threadId'] = ifnone(thread_id,self.thread_id)
         res = self.gmail._exec(self.gmail._u.drafts().send(userId=self.gmail.user_id,body=body))
@@ -545,7 +545,7 @@ class Gmail:
     ):
         "Send email (pass `to`, `subj`, `body` etc or an EmailMessage)"
         sys.audit('solvemail.send', kwargs.get('to'), kwargs.get('body'))
-        if email is None: email = mk_email(**kwargs)
+        email = ifnone(email,mk_email(**kwargs))
         return self._send(email, thread_id)
 
     def _create_draft(self, email, thread_id:str=None):
