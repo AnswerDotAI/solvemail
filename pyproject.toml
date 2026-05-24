@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "solvemail"
@@ -30,14 +30,11 @@ dev = [
   "fastship>=0.0.10",
 ]
 
-[tool.hatch.version]
-path = "solvemail/__init__.py"
+[tool.setuptools.dynamic]
+version = { attr = "solvemail.__version__" }
 
-[tool.hatch.build.targets.wheel]
-packages = ["solvemail"]
-
-[tool.hatch.build.targets.sdist]
-include = ["solvemail", "tests", "README.md", "CHANGELOG.md", "pyproject.toml"]
+[tool.setuptools.packages.find]
+include = ["solvemail", "solvemail.*"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
@@ -51,3 +48,4 @@ filterwarnings = [
 [tool.fastship]
 branch = "main"
 changelog_file = "CHANGELOG.md"
+
