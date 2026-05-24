@@ -1,6 +1,6 @@
 from fastcore.utils import *
 from fastcore.meta import *
-import re,time,html,httpx,mistletoe
+import re,time,html,httpx,mistletoe,sys
 from bs4 import BeautifulSoup
 from googleapiclient.errors import HttpError
 from .auth import gmail_service
@@ -141,8 +141,7 @@ class Email:
 
     def _repr_html_(self):
         h = self.hdrs()
-        parts = [f"<b>From:</b> {h.get('from','')}", f"<b>Date:</b> {h.get('date','')}",
-                 f"<b>To:</b> {h.get('to','')}"]
+        parts = [f"<b>From:</b> {h.get('from','')}", f"<b>Date:</b> {h.get('date','')}", f"<b>To:</b> {h.get('to','')}"]
         if h.get('cc'): parts.append(f"<b>Cc:</b> {h.get('cc')}")
         if h.get('bcc'): parts.append(f"<b>Bcc:</b> {h.get('bcc')}")
         parts.append(f"<b>Subject:</b> {h.get('subject','')}")
@@ -243,7 +242,7 @@ class Email:
                 parts = url[7:].split('?', 1)
                 to = parts[0]
                 subj = dict(p.split('=',1) for p in parts[1].split('&')).get('subject','unsubscribe') if len(parts)>1 else 'unsubscribe'
-                return self.gmail.send(to=to, subj=subj, body='unsubscribe')
+                return self.gmail._send(mk_email(to=to, subj=subj, body='unsubscribe'))
             if url.startswith('http'):
                 resp = httpx.post(url, content=post_body, headers={'Content-Type': 'application/x-www-form-urlencoded'})
                 return resp
@@ -365,6 +364,7 @@ class Draft:
     @delegates(mk_email)
     def send(self,email=None,thread_id=None,**kwargs):
         "Send this draft (optionally updating email from `email` or kwargs)"
+        sys.audit('solvemail.senddraft', self.id)
         body = dict(id=self.id)
         if email or kwargs:
             if email is None: email = mk_email(**kwargs)
@@ -530,6 +530,13 @@ class Gmail:
         it = self._list(self._u.drafts().list,'drafts',limit=max_results,**kwargs)
         return L(it).map(lambda o: Draft(self,d=o))
 
+    def _send(self, email, thread_id:str=None):
+        "Send `email` without auditing"
+        body = dict(raw=raw_email(email))
+        if thread_id: body['threadId'] = thread_id
+        res = self._exec(self._u.messages().send(userId=self.user_id,body=body))
+        return Email(self,d=res)
+
     @delegates(mk_email, but=['headers','att'])
     def send(self,
         email=None,         # EmailMessage to send, or None to build from kwargs
@@ -537,11 +544,9 @@ class Gmail:
         **kwargs
     ):
         "Send email (pass `to`, `subj`, `body` etc or an EmailMessage)"
+        sys.audit('solvemail.send', kwargs.get('to'), kwargs.get('body'))
         if email is None: email = mk_email(**kwargs)
-        body = dict(raw=raw_email(email))
-        if thread_id: body['threadId'] = thread_id
-        res = self._exec(self._u.messages().send(userId=self.user_id,body=body))
-        return Email(self,d=res)
+        return self._send(email, thread_id)
 
     def _create_draft(self, email, thread_id:str=None):
         "Create a draft from an EmailMessage"
@@ -620,8 +625,7 @@ class Gmail:
         cc = None
         if reply_all:
             me = self.profile().email.lower()
-            cc = {a.strip() for a in (h.get('to','')+','+h.get('cc','')).split(',')
-                  if a.strip() and a.strip().lower() != me} - {to}
+            cc = {a.strip() for a in (h.get('to','')+','+h.get('cc','')).split(',') if a.strip() and a.strip().lower() != me} - {to}
             cc = ','.join(cc) or None
         return t.reply_draft(body=body, html=html, to=to, cc=cc)
 
@@ -639,8 +643,7 @@ class Gmail:
     ):  # List of API responses
         "Batch modify labels on emails, auto-chunking"
         ids = _uniq(L(ids).map(_as_id))
-        return [self._batch_label(b, add, rm, delay if i else 0)
-                for i,b in enumerate(chunked(ids, chunk_sz))]
+        return [self._batch_label(b, add, rm, delay if i else 0) for i,b in enumerate(chunked(ids, chunk_sz))]
 
     def batch_delete(self,
         ids:list  # Email ids to delete permanently (max 1000)
@@ -681,8 +684,7 @@ class Gmail:
 
     def _batch_get(self, items, cls, api, fmt='metadata', callback=None, chunk_sz=10, delay=0.1):
         all_results = {}
-        for i,chunk in enumerate(chunked(items, chunk_sz)):
-            all_results |= self._chunk_get(chunk, cls, api, fmt, callback, delay if i else 0)
+        for i,chunk in enumerate(chunked(items, chunk_sz)): all_results |= self._chunk_get(chunk, cls, api, fmt, callback, delay if i else 0)
         return L(all_results[o.id if hasattr(o,'id') else o] for o in items)
 
     def send_drafts(self,
@@ -717,7 +719,7 @@ class Gmail:
     ):
         "Batch fetch emails and return summary dicts"
         emails = self.get_emails(ids, fmt=fmt)
-        return [{'id': e.id, 'thread_id': e.thread_id, 'frm': e.frm, 'to': e.to, 'subject': e.subj, 'snippet': e.snip} for e in emails]
+        return [dict(id=e.id, thread_id=e.thread_id, frm=e.frm, to=e.to, subject=e.subj, snippet=e.snip) for e in emails]
 
     def view_threads(self,
         ids:list,            # Thread ids to fetch
@@ -725,8 +727,8 @@ class Gmail:
     ):
         "Batch fetch threads and return summary with email list"
         threads = self.get_threads(ids, fmt=fmt)
-        return [{'id': t.id, 'emails': [{'id': e.id, 'frm': e.frm, 'to': e.to, 'subject': e.subj,
-                  'snippet': e.snip, 'labels': list(e.label_ids)} for e in t.emails()]} for t in threads]
+        return [dict(id=t.id, emails=[dict(id=e.id, frm=e.frm, to=e.to, subject=e.subj,
+            snippet=e.snip, labels=list(e.label_ids)) for e in t.emails()]) for t in threads]
 
     def view_email(self,
         id:str,              # Email id
@@ -746,8 +748,8 @@ class Gmail:
             parts.append(f"Subject: {h.get('subject','')}")
             if atts: parts.append(f"Attachments: {', '.join(a['filename'] for a in atts)}")
             return '\n'.join(parts) + '\n\n' + body
-        return dict(id=e.id, thread_id=e.thread_id, frm=h.get('from'), to=h.get('to'),
-                    cc=h.get('cc'), date=h.get('date'), subject=h.get('subject'), atts=atts, body=body)
+        return dict(id=e.id, thread_id=e.thread_id, frm=h.get('from'), to=h.get('to'), cc=h.get('cc'),
+            date=h.get('date'), subject=h.get('subject'), atts=atts, body=body)
 
     def view_thread(self,
         id:str,              # Thread id
