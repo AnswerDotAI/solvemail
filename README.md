@@ -48,12 +48,12 @@ threads = search_threads('is:unread newer_than:7d', max_results=10)
 
 # Get thread details
 t = threads[0]
-for m in t.msgs():
-    print(m.frm, '|', m.subj)
+for e in t.emails():
+    print(e.frm, '|', e.subj)
 
-# Read a message
-m = t.msgs()[0]
-m.subj, m.frm, m.snip, m.text()
+# Read an email
+e = t.emails()[0]
+e.subj, e.frm, e.snip, e.text()
 
 # Send an email
 send(to='someone@example.com', subj='Hello', body='Hi there!')
@@ -71,30 +71,30 @@ draft.send()
 # Search threads (conversations)
 search_threads('from:boss@company.com', max_results=20)
 
-# Search individual messages
-search_msgs('has:attachment filename:pdf', max_results=100)
+# Search individual emails
+search_emails('has:attachment filename:pdf', max_results=100)
 ```
 
-### Messages
+### Emails
 
 ```python
-m = msg(id)           # Fetch by id
-m.subj, m.frm, m.to             # Headers
-m.text(), m.html()              # Body content
-m.mark_read(), m.mark_unread()  # Read status
-m.star(), m.unstar()            # Starred
-m.archive()                     # Remove from inbox
-m.trash(), m.untrash()          # Trash
-m.add_labels('MyLabel')         # Add labels
-m.rm_labels('INBOX')            # Remove labels
+e = email(id)         # Fetch by id
+e.subj, e.frm, e.to             # Headers
+e.text(), e.html()              # Body content
+e.mark_read(), e.mark_unread()  # Read status
+e.star(), e.unstar()            # Starred
+e.archive()                     # Remove from inbox
+e.trash(), e.untrash()          # Trash
+e.add_labels('MyLabel')         # Add labels
+e.rm_labels('INBOX')            # Remove labels
 ```
 
 ### Threads
 
 ```python
 t = thread(id)        # Fetch by id
-t.msgs()                        # List messages
-t[0], t[-1]                     # Index into messages
+t.emails()                      # List emails
+t[0], t[-1]                     # Index into emails
 t.reply_draft(body='...')       # Create reply draft
 t.reply(body='...')             # Send reply directly
 
@@ -103,28 +103,28 @@ threads = search_threads('in:inbox', max_results=50)
 threads = get_threads(threads)
 ```
 
-### Message display
+### Email Display
 
-Messages render nicely in Jupyter notebooks (quotes and signatures stripped automatically).
+Emails render nicely in Jupyter notebooks (quotes and signatures stripped automatically).
 
 ```python
-m = t[-1]
-m.body()   # Cleaned text (no quotes/signatures)
-m.html()   # HTML body (falls back to text wrapped in <pre>)
+e = t[-1]
+e.body()   # Cleaned text (no quotes/signatures)
+e.html()   # HTML body (falls back to text wrapped in <pre>)
 
-# View message with headers (as dict or plain text)
-view_msg(m.id)                      # Returns dict with headers + body
-view_msg(m.id, as_json=False)       # Returns formatted text
+# View email with headers (as dict or plain text)
+view_email(e.id)                    # Returns dict with headers + body
+view_email(e.id, as_json=False)     # Returns formatted text
 
 # View full thread
-view_thread(t.id)                   # Dict of msgid -> msg dict
+view_thread(t.id)                   # Dict of email id -> email dict
 view_thread(t.id, as_json=False)    # Concatenated text with separators
 ```
 
 ### Inbox helpers
 
 ```python
-view_inbox(max_msgs=20)             # Batch fetch inbox messages
+view_inbox(max_emails=20)           # Batch fetch inbox emails
 view_inbox_threads(max_threads=20)  # Batch fetch inbox threads
 view_inbox(unread=True)             # Only unread
 ```
@@ -149,12 +149,12 @@ reply_to_thread(thread_id, body='...')
 ### Bulk operations
 
 ```python
-# Batch modify labels (auto-chunks, no 1000 message limit)
-ids = [m.id for m in search_msgs('in:inbox')]
+# Batch modify labels (auto-chunks, no 1000 email limit)
+ids = [e.id for e in search_emails('in:inbox')]
 batch_label(ids, add=['SPAM'], rm=['INBOX'])
 
-# Trash multiple messages
-trash_msgs(ids)
+# Trash multiple emails
+trash_emails(ids)
 
 # Permanently delete (requires full mail scope)
 batch_delete(ids)
@@ -178,4 +178,3 @@ This is a fastship project. Use `ship-*` commands to manage.
 ## Credits
 
 Inspired by [ezgmail](https://github.com/asweigart/ezgmail) by [Al Sweigart](https://inventwithpython.com/) — thanks Al for the great work! The ezgmail repo also has excellent documentation on setting up Gmail API credentials.
-
