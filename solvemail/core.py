@@ -433,6 +433,7 @@ async def labels(self:Email):
 async def labels(self:Thread):
     return L(await asyncio.gather(*L(self.labelIds).map(self.gmail.label))).attrgot('name')
 
+# %% ../nbs/00_core.ipynb #e1600ded
 @patch
 async def mark_read(self:(Email,Thread)):   return await self.modify(rm='UNREAD')
 @patch
