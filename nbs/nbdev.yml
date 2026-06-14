@@ -1,0 +1,9 @@
+project:
+  output-dir: _docs
+
+website:
+  title: "solvemail"
+  site-url: "https://AnswerDotAI.github.io/solvemail"
+  description: "Gmail / Google Workspace email client built on the Gmail API"
+  repo-branch: main
+  repo-url: "https://github.com/AnswerDotAI/solvemail"

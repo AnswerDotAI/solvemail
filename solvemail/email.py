@@ -95,3 +95,4 @@ def html_part(p):
 def att_parts(p):
     "Return attachment parts from `payload`"
     return L(walk_parts(p)).filter(lambda o: o.get('filename') and o.get('body',{}).get('attachmentId'))
+
