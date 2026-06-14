@@ -1,4 +1,4 @@
-"""Fill in a module description here
+"""User facing API for solvemail
 
 Docs: https://AnswerDotAI.github.io/solvemailcore.html.md"""
 
