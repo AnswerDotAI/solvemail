@@ -15,7 +15,7 @@ from fastgws import GMail
 from fastgws.auth import *
 from .email import *
 
-import asyncio,html,httpx,mistletoe
+import asyncio,html,httpx,mistletoe,sys
 
 # %% ../nbs/00_core.ipynb #da884c81
 class Gmail:
@@ -68,6 +68,7 @@ class Email(AttrDict):
 @patch
 @delegates(mk_email)
 async def send(self:Gmail, thread_id=None, **kwargs):
+    sys.audit('solvemail.Gmail.send', kwargs.get('to'), kwargs.get('body'))
     msg = dict(raw=raw_email(mk_email(**kwargs)))
     if thread_id: msg['thread_id'] = thread_id
     return Email(self, await self.client.users.messages.send(user_id=self.user_id, **msg))
@@ -154,7 +155,9 @@ async def attachments(self:Email):
 
 # %% ../nbs/00_core.ipynb #bd09ef81
 @patch
-async def delete(self:Email): return await self.gmail.client.users.messages.delete(user_id='me', id=self.id)
+async def delete(self:Email):
+    sys.audit('solvemail.Email.delete')
+    return await self.gmail.client.users.messages.delete(user_id='me', id=self.id)
 
 # %% ../nbs/00_core.ipynb #e0d020b1
 class Draft(Email):
@@ -206,6 +209,7 @@ async def search_drafts(self:Gmail, q=None, max_results=10, **kwargs):
 # %% ../nbs/00_core.ipynb #e0d2be45
 @patch
 async def send(self:Draft):
+    sys.audit('solvemail.Draft.send')
     return Email(self.gmail, await self.gmail.client.users.drafts.send(user_id='me', id=self.draft_id))
 
 # %% ../nbs/00_core.ipynb #bac9930b
@@ -358,6 +362,7 @@ class Label(AttrDict):
         self.gmail._lbls = None
         return self
     async def delete(self):
+        sys.audit('solvemail.Label.delete')
         await self.gmail.client.users.labels.delete(user_id='me', id=self.id)
         self.gmail._lbls = None
     async def patch(self, **kwargs):
@@ -449,12 +454,15 @@ async def inbox(self:(Email,Thread)):       return await self.modify(add='INBOX'
 
 # %% ../nbs/00_core.ipynb #7bc49692
 @patch
-async def trash(self:Email):   return self.update(await self.gmail.client.users.messages.trash(user_id='me', id=self.id))
+async def trash(self:Email):
+    sys.audit('solvemail.Email.trash')
+    return self.update(await self.gmail.client.users.messages.trash(user_id='me', id=self.id))
 @patch
 async def untrash(self:Email): return self.update(await self.gmail.client.users.messages.untrash(user_id='me', id=self.id))
 
 @patch
 async def trash(self:Thread):
+    sys.audit('solvemail.Thread.trash')
     await self.gmail.client.users.threads.trash(user_id='me', id=self.id)
     return await self.refresh()
 @patch
@@ -464,10 +472,14 @@ async def untrash(self:Thread):
 
 # %% ../nbs/00_core.ipynb #5f900aa0
 @patch
-async def delete(self:Draft): return await self.gmail.client.users.drafts.delete(user_id='me', id=self.draft_id)
+async def delete(self:Draft):
+    sys.audit('solvemail.Draft.delete')
+    return await self.gmail.client.users.drafts.delete(user_id='me', id=self.draft_id)
 
 @patch
-async def delete(self:Thread): return await self.gmail.client.users.threads.delete(user_id='me', id=self.id)
+async def delete(self:Thread):
+    sys.audit('solvemail.Thread.delete')
+    return await self.gmail.client.users.threads.delete(user_id='me', id=self.id)
 
 # %% ../nbs/00_core.ipynb #b4a4f6f0
 def _parse_unsub(unsub, post=None):
