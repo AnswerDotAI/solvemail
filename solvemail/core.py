@@ -19,13 +19,20 @@ import asyncio,html,httpx,mistletoe,sys
 
 # %% ../nbs/00_core.ipynb #da884c81
 class Gmail:
-    def __init__(self, scopes='readonly', creds=None, user_id='me',
-                 redirect_uri='https://oauth.appapis.org/redirect', listen=False, port=0):
+    def __init__(self, client, user_id='me'):
+        store_attr()
+        self._lbls = None
+
+    @classmethod
+    async def init(cls, scopes='readonly', creds=None, user_id='me',
+             redirect_uri='https://oauth.appapis.org/redirect',
+             listen=False, port=0, open_url=print):
         if scopes == 'full': scopes = ['https://mail.google.com/']
         else:                scopes = [f'https://www.googleapis.com/auth/gmail.{x}' for x in listify(scopes)]
-        self.creds = ifnone(creds, oauth_creds(scopes=scopes, redirect_uri=redirect_uri, listen=listen, port=port))
-        self.client,self.user_id = GMail(creds=self.creds),user_id
-        self._lbls = None
+        if creds is None:
+            creds = await oauth_creds(scopes=scopes, redirect_uri=redirect_uri, listen=listen,
+                                      port=port, open_url=open_url)
+        return cls(GMail(creds=creds), user_id=user_id)
 
     async def profile(self):
         "Profile resource with `email` attribute"
