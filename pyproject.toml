@@ -15,7 +15,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
 ]
-dependencies = ['fastgws>=0.2.3']
+dependencies = ['fastcore', 'fastgws>=0.2.3']
 
 [project.urls]
 Repository = "https://github.com/AnswerDotAI/solvemail"
