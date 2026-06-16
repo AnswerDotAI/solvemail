@@ -127,7 +127,7 @@ from solvemail.core import (Gmail, Email, Emails, Thread, Threads,
 __all__ = ['Gmail', 'Email', 'Emails', 'Thread', 'Threads',
            'Draft', 'Drafts', 'Label', 'EmailAttachment']
 
-allow({Gmail: ['profile', 'search', 'search_threads', 'search_drafts',
+allow({Gmail: ['profile', 'search', 'search_threads', 'search_drafts', 'create_draft',
                'labels', 'label', 'find_labels', 'create_label', 'lbl_ids'],
        Email: ['refresh', 'html', 'body', 'modify',
                'mark_read', 'mark_unread', 'star', 'unstar', 'archive', 'inbox'],
