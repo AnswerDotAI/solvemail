@@ -118,17 +118,32 @@ def _email_row(e, att=None):
 
 _email_hdr = '| id | from | subj | 📎 | date |\n|-|-|-|-|-|\n'
 class Emails(L):
+    def __init__(self, d, *rest, gmail=None, **kwargs):
+        super().__init__(d, *rest, **kwargs)
+        self.gmail = gmail
+
     def _repr_markdown_(self): return _email_hdr + '\n'.join(self.map(_email_row))
+
+    async def refresh(self, fmt='metadata'):
+        if not self: return self
+        reqs = [(e.id, self.gmail.client._gservice.users().messages().get(userId='me', id=e.id, format=fmt)) for e in self]
+        res = self.gmail.client.batch_get(reqs)
+        for e in self:
+            d = res.get(e.id)
+            if d: e.update(_flat_hdrs(dict2obj(d)))
+        return self
 
 @patch
 async def _search(self:Gmail, rsrc, key, cls, coll, q=None, max_results=10, **kwargs):
     r = await getattr(self.client.users, rsrc).list(user_id=self.user_id, q=q, max_results=max_results, **kwargs)
     os = L(r.get(key) or []).map(lambda o: cls(self, o))
-    return coll(await asyncio.gather(*os.map(lambda o: o.refresh('metadata'))))
+    return await coll(os, gmail=self).refresh()
 
 @patch
-async def search(self:Gmail, q=None, max_results=20, **kwargs):
+async def search_emails(self:Gmail, q=None, max_results=20, **kwargs):
     return await self._search('messages', 'messages', Email, Emails, q, max_results, **kwargs)
+
+
 
 # %% ../nbs/00_core.ipynb #2ecd04dc
 def hsize(n):
@@ -203,12 +218,27 @@ async def update_draft(self:Draft, thread_id=None, **kwargs):
     self.draft_id = d['id']
     return await self.refresh('metadata')
 
-# %% ../nbs/00_core.ipynb #861f3e5d
-def _draft_row(d): return f'| {d.draft_id} | {d.frm or ""} | {d.subj or ""} | {d.get("date") or ""} |'
+# %% ../nbs/00_core.ipynb #8e386292
+def _draft_row(d): return f'| {d.draft_id} | {d.get("frm") or ""} | {d.get("subj") or ""} | {d.get("date") or ""} |'
 
 _draft_hdr = '| draft_id | from | subj | date |\n|-|-|-|-|\n'
 class Drafts(L):
+    def __init__(self, d, *rest, gmail=None, **kwargs):
+        super().__init__(d, *rest, **kwargs)
+        self.gmail = gmail
+
     def _repr_markdown_(self): return _draft_hdr + '\n'.join(self.map(_draft_row))
+
+    async def refresh(self, fmt='metadata'):
+        if not self: return self
+        reqs = [(d.draft_id, self.gmail.client._gservice.users().drafts().get(userId='me', id=d.draft_id, format=fmt)) for d in self]
+        res = self.gmail.client.batch_get(reqs)
+        for d in self:
+            r = res.get(d.draft_id)
+            if r:
+                d.draft_id = r['id']
+                d.update(_flat_hdrs(dict2obj(r['message'])))
+        return self
 
 @patch
 async def search_drafts(self:Gmail, q=None, max_results=10, **kwargs):
@@ -280,8 +310,7 @@ class Thread(AttrDict):
     async def refresh(self, fmt='metadata'):
         d = await self.gmail.client.users.threads.get(user_id='me', id=self.id, format=fmt)
         self.update(d)
-        self.emails = await asyncio.gather(*Emails(d.messages).map(lambda o: Email(self.gmail, o).refresh(fmt)))
-        self.emails = Emails(self.emails)
+        self.emails = await Emails([Email(self.gmail, o) for o in d.messages], gmail=self.gmail).refresh(fmt)
         return self
 
     @classmethod
@@ -318,8 +347,22 @@ def _thread_row(t): return _email_row(t.emails[-1], any(_has_att(e) for e in t.e
 
 _thread_hdr = _email_hdr.replace('|\n|-', '| emails |\n|-').replace('-|\n', '-|-|\n')
 class Threads(L):
+    def __init__(self, d, *rest, gmail=None, **kwargs):
+        super().__init__(d, *rest, **kwargs)
+        self.gmail = gmail
+
     def _repr_markdown_(self): return _thread_hdr + '\n'.join(self.map(_thread_row))
 
+    async def refresh(self, fmt='metadata'):
+        if not self: return self
+        reqs = [(t.id, self.gmail.client._gservice.users().threads().get(userId='me', id=t.id, format=fmt)) for t in self]
+        res = self.gmail.client.batch_get(reqs)
+        for t in self:
+            d = res.get(t.id)
+            if d:
+                t.update(dict2obj(d))
+                t.emails = await Emails(L(dict2obj(d).messages).map(lambda m: Email(t.gmail, m)), gmail=self.gmail).refresh()
+        return self
 
 @patch
 async def search_threads(self:Gmail, q=None, max_results=10, **kwargs):
@@ -488,6 +531,44 @@ async def delete(self:Draft):
 async def delete(self:Thread):
     sys.audit('solvemail.Thread.delete')
     return await self.gmail.client.users.threads.delete(user_id='me', id=self.id)
+
+# %% ../nbs/00_core.ipynb #3cacd9da
+@patch
+async def batch_modify(self:Gmail, ids, add=None, rm=None):
+    "Add/remove `add`/`rm` labels from all messages in `ids`"
+    return await self.client.users.messages.batch_modify(
+        user_id=self.user_id, ids=listify(ids),
+        add_label_ids=await self.lbl_ids(add),
+        remove_label_ids=await self.lbl_ids(rm))
+
+@patch
+async def batch_delete(self:Gmail, ids):
+    sys.audit('solvemail.Gmail.batch_delete', listify(ids))
+    return await self.client.users.messages.batch_delete(
+        user_id=self.user_id, ids=listify(ids))
+
+@patch
+async def modify(self:Emails, add=None, rm=None):
+    return await self.gmail.batch_modify(self.attrgot('id'), add, rm)
+
+@patch
+async def delete(self:Emails):
+    return await self.gmail.batch_delete(self.attrgot('id'))
+
+@patch
+async def trash(self:Emails):       return await self.modify(add='TRASH')
+@patch
+async def untrash(self:Emails):     return await self.modify(rm='TRASH')
+@patch
+async def mark_read(self:Emails):   return await self.modify(rm='UNREAD')
+@patch
+async def mark_unread(self:Emails): return await self.modify(add='UNREAD')
+@patch
+async def star(self:Emails):        return await self.modify(add='STARRED')
+@patch
+async def unstar(self:Emails):      return await self.modify(rm='STARRED')
+@patch
+async def archive(self:Emails):     return await self.modify(rm='INBOX')
 
 # %% ../nbs/00_core.ipynb #b4a4f6f0
 def _parse_unsub(unsub, post=None):

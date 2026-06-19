@@ -119,7 +119,9 @@ Fetching is lazy and `fmt`-dependent. Search returns emails at `metadata` (heade
 
 Scopes gate what you can do: `'readonly'` can't change labels, and permanent `delete` needs `'full'`. A permission error usually means the client was created with too narrow a scope.
 
-Search is keyword-driven and can miss messages or return thin snippets — treat it as a way to gather candidates, not proof that something does or doesn't exist."""
+Search is keyword-driven and can miss messages or return thin snippets — treat it as a way to gather candidates, not proof that something does or doesn't exist.
+
+Dates are strings, not datetime objects."""
 from pyskills.core import allow
 from solvemail.core import (Gmail, Email, Emails, Thread, Threads,
                             Draft, Drafts, Label, EmailAttachment)
