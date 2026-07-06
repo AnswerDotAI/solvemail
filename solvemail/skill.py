@@ -17,9 +17,9 @@ All solvemail methods are async, so `await` them.
 
 Search uses Gmail's own query syntax — the same as the Gmail search box. Common operators: `from:foo@bar.com`, `to:me`, `subject:invoice`, `has:attachment`, `is:unread`, `is:starred`, `label:Receipts`, `in:inbox`, and date filters like `after:2026/01/01` or `newer_than:7d`. Combine them freely, e.g. `from:stripe has:attachment newer_than:30d`.
 
-`gmail.search(q, max_results=20)` returns a list of `Email` objects, each refreshed to `metadata` so you get senders, subjects, dates, and snippets without a second fetch:
+`gmail.search_emails(q, max_results=20)` returns a list of `Email` objects, each refreshed to `metadata` so you get senders, subjects, dates, and snippets without a second fetch:
 
-    ems = await gmail.search('from:stripe has:attachment', max_results=10)
+    ems = await gmail.search_emails('from:stripe has:attachment', max_results=10)
 
 `gmail.search_threads(q, max_results=10)` works the same way but returns whole conversations as `Thread` objects, which is usually what you want when replies matter:
 
@@ -129,11 +129,13 @@ from solvemail.core import (Gmail, Email, Emails, Thread, Threads,
 __all__ = ['Gmail', 'Email', 'Emails', 'Thread', 'Threads',
            'Draft', 'Drafts', 'Label', 'EmailAttachment']
 
-allow({Gmail: ['profile', 'search', 'search_threads', 'search_drafts', 'create_draft',
+allow({ Gmail: ['profile', 'search_emails', 'search_threads', 'search_drafts', 'create_draft',
                'labels', 'label', 'find_labels', 'create_label', 'lbl_ids'],
-       Email: ['refresh', 'html', 'body', 'modify',
+        Email: ['refresh', 'html', 'body', 'modify',
                'mark_read', 'mark_unread', 'star', 'unstar', 'archive', 'inbox'],
-       Thread: ['refresh', 'modify',
+        Emails: ['refresh', 'modify', 'mark_read', 'mark_unread', 'star', 'unstar',
+                'archive', 'inbox'],
+        Thread: ['refresh', 'modify',
                 'mark_read', 'mark_unread', 'star', 'unstar', 'archive', 'inbox'],
-       Label: ['refresh', 'rename'],
-       EmailAttachment: ['fetch']})
+        Label: ['refresh', 'rename'],
+        EmailAttachment: ['fetch']})
