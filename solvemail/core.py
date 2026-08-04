@@ -30,6 +30,7 @@ class Gmail:
 
 # %% ../nbs/00_core.ipynb #9563f05e
 def _flat_hdrs(d):
+    if 'payload' not in d: raise ValueError("no headers: use format 'metadata' or 'full'")
     keep = {'date','from','to','subject','message-id','references',
             'reply-to','list-unsubscribe','list-unsubscribe-post'}
     hdrs = {x['name'].lower(): x['value'] for x in d.payload.headers if x['name'].lower() in keep}
@@ -287,7 +288,10 @@ class Thread(AttrDict):
     def __init__(self, gmail, d):
         super().__init__(d)
         self.gmail = gmail
-        self.emails = Emails(self.get('messages') or []).map(lambda o: Email(gmail, o))
+        self._set_emails()
+
+    def _set_emails(self):
+        self.emails = Emails(L(self.get('messages') or []).map(lambda m: Email(self.gmail, _flat_hdrs(m))), gmail=self.gmail)
 
     def __repr__(self):
         if not self.emails: return f'Thread({self.id})'
@@ -299,7 +303,7 @@ class Thread(AttrDict):
     async def refresh(self, fmt='metadata'):
         d = await self.gmail.client.users.threads.get(user_id='me', id=self.id, format=fmt)
         self.update(d)
-        self.emails = await Emails([Email(self.gmail, o) for o in d.messages], gmail=self.gmail).refresh(fmt)
+        self._set_emails()
         return self
 
     @classmethod
@@ -350,7 +354,7 @@ class Threads(L):
             d = res.get(t.id)
             if d:
                 t.update(dict2obj(d))
-                t.emails = await Emails(L(dict2obj(d).messages).map(lambda m: Email(t.gmail, m)), gmail=self.gmail).refresh()
+                t._set_emails()
         return self
 
 @patch
