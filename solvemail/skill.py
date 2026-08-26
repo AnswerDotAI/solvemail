@@ -137,8 +137,7 @@ __all__ = ['Gmail', 'Email', 'Emails', 'Thread', 'Threads',
            'Draft', 'Drafts', 'Label', 'EmailAttachment',
            'oauth_creds', 'auth_url', 'finish_auth']
 
-allow(oauth_creds, auth_url, finish_auth,
-      { Gmail: ['__init__', 'profile', 'search_emails', 'search_threads', 'search_drafts', 'create_draft',
+allow({ Gmail: ['__init__', 'profile', 'search_emails', 'search_threads', 'search_drafts', 'create_draft',
                'labels', 'label', 'find_labels', 'create_label', 'lbl_ids'],
         Email: ['refresh', 'html', 'body', 'modify',
                'mark_read', 'mark_unread', 'star', 'unstar', 'archive', 'inbox'],
