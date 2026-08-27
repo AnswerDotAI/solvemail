@@ -33,6 +33,9 @@ include = ["solvemail"]
 [project.entry-points.pyskills]
 "solvemail.skill" = "solvemail.skill"
 
+[project.entry-points.fastaudit_import_allow]
+solvemail = "solvemail"
+
 [tool.nbdev]
 allowed_metadata_keys = ['solveit']
 allowed_cell_metadata_keys = ['solveit_ai']
