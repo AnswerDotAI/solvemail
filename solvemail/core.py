@@ -115,12 +115,7 @@ class Emails(L):
     def _repr_markdown_(self): return _email_hdr + '\n'.join(self.map(_email_row))
 
     async def refresh(self, fmt='metadata'):
-        if not self: return self
-        reqs = [(e.id, self.gmail.client._gservice.users().messages().get(userId='me', id=e.id, format=fmt)) for e in self]
-        res = self.gmail.client.batch_get(reqs)
-        for e in self:
-            d = res.get(e.id)
-            if d: e.update(_flat_hdrs(dict2obj(d)))
+        await parallel_async(Email.refresh, self, fmt)
         return self
 
 @patch
@@ -220,14 +215,7 @@ class Drafts(L):
     def _repr_markdown_(self): return _draft_hdr + '\n'.join(self.map(_draft_row))
 
     async def refresh(self, fmt='metadata'):
-        if not self: return self
-        reqs = [(d.draft_id, self.gmail.client._gservice.users().drafts().get(userId='me', id=d.draft_id, format=fmt)) for d in self]
-        res = self.gmail.client.batch_get(reqs)
-        for d in self:
-            r = res.get(d.draft_id)
-            if r:
-                d.draft_id = r['id']
-                d.update(_flat_hdrs(dict2obj(r['message'])))
+        await parallel_async(Draft.refresh, self, fmt)
         return self
 
 @patch
@@ -347,14 +335,7 @@ class Threads(L):
     def _repr_markdown_(self): return _thread_hdr + '\n'.join(self.map(_thread_row))
 
     async def refresh(self, fmt='metadata'):
-        if not self: return self
-        reqs = [(t.id, self.gmail.client._gservice.users().threads().get(userId='me', id=t.id, format=fmt)) for t in self]
-        res = self.gmail.client.batch_get(reqs)
-        for t in self:
-            d = res.get(t.id)
-            if d:
-                t.update(dict2obj(d))
-                t._set_emails()
+        await parallel_async(Thread.refresh, self, fmt)
         return self
 
 @patch
