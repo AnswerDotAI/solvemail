@@ -1,51 +1,41 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "solvemail"
 dynamic = ["version"]
-description = "A fastai-style Gmail API client with convenient read/write support"
+description = "Gmail / Google Workspace email client built on the Gmail API"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
-authors = [{name="Answer.AI"}]
-dependencies = [
-  "fastcore>=1.7.0",
-  "google-api-python-client>=2.120.0",
-  "google-auth>=2.30.0",
-  "google-auth-oauthlib>=1.2.0",
-  "google-auth-httplib2>=0.2.0",
-  "httpx>=0.27.0",
-  "beautifulsoup4>=4.12.0",
-  "mistletoe>=1.3.0",
+authors = [{name = "Nathan Cooper", email = "nathanacooper@proton.me"}]
+keywords = ['nbdev']
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
 ]
+dependencies = ['fastcore>=2.2.6', 'fastgws>=0.2.7']
 
-[project.optional-dependencies]
-dev = [
-  "pytest>=8.0.0",
-  "pytest-timeout>=2.2.0",
-  "build",
-  "twine",
-  "fastship>=0.0.10",
-]
+[project.urls]
+Repository = "https://github.com/AnswerDotAI/solvemail"
+Documentation = "https://AnswerDotAI.github.io/solvemail/"
+
+[project.entry-points.nbdev]
+solvemail = "solvemail._modidx:d"
 
 [tool.setuptools.dynamic]
-version = { attr = "solvemail.__version__" }
+version = {attr = "solvemail.__version__"}
 
 [tool.setuptools.packages.find]
-include = ["solvemail", "solvemail.*"]
+include = ["solvemail"]
 
-[tool.pytest.ini_options]
-addopts = "-q"
-testpaths = ["tests"]
-timeout = 120
-filterwarnings = [
-    "ignore::DeprecationWarning:httplib2.*:",
-    "ignore::pytest.PytestConfigWarning",
-]
+[project.entry-points.pyskills]
+"solvemail.skill" = "solvemail.skill"
 
-[tool.fastship]
-branch = "main"
-changelog_file = "CHANGELOG.md"
+[project.entry-points.fastaudit_import_allow]
+solvemail = "solvemail"
 
+[tool.nbdev]
+allowed_metadata_keys = ['solveit']
+allowed_cell_metadata_keys = ['solveit_ai']

@@ -1,52 +1,7 @@
-__version__ = "0.1.10"
+"""Gmail / Google Workspace email client built on the Gmail API
 
+Modules:
 
+- `solvemail.skill`: Load this skill when an agent needs to read, search, and organize Gmail using solvemail. It covers connecting to Gmail, searching messages and threads, reading bodies and attachments, and managing labels. Sending, replying, forwarding, and trashing are documented for reference but are not enabled by default."""
 
-from fastcore.utils import *
-from functools import wraps
-from inspect import signature
-from . import auth,core
-from .auth import *
-from .core import *
-import time
-
-__all__ = [
-    'init','g','solvemail_tools','refresh_solvemail','wait_secs'
-    ] + auth.__all__ + core.__all__ + [
-    k for k in dir(Gmail) if not k.startswith('_')]
-
-def __dir__(): return __all__
-
-_g = None
-
-def _proxy(name):
-    method = getattr(Gmail, name)
-    @wraps(method)
-    def fn(*a, **kw): return getattr(g(), name)(*a, **kw)
-    return fn
-
-def refresh_solvemail():
-    "Reload Gmail methods"
-    for _k in dir(Gmail):
-        if callable(getattr(Gmail, _k)) and not _k.startswith('_'): globals()[_k] = _proxy(_k)
-
-refresh_solvemail()
-
-def init(creds=None, creds_path='credentials.json', token_path='token.json', scopes=None, user_id='me',
-         interactive=True, redirect_uri=None, retries=3):
-    "Create a global `Gmail` client using `creds_path`/`token_path` and `scopes`"
-    global _g
-    if creds is None: creds = oauth_creds(creds_path=creds_path, token_path=token_path, scopes=scopes, interactive=interactive, redirect_uri=redirect_uri)
-    _g = Gmail(creds=creds, user_id=user_id, retries=retries)
-
-def g():
-    "Return the global `Gmail` client"
-    if _g is None: raise AttributeError('Call solvemail.init(...) first')
-    return _g
-
-def solvemail_tools(): return '&`[search_threads, search_emails, thread, draft, drafts, labels, label, find_labels, profile, send, reply_draft, reply_to_thread, create_label, trash_emails, view_inbox, view_inbox_threads, view_email, view_thread, batch_delete, batch_label, create_draft, email, send_drafts, report_spam]`'
-
-def wait_secs(secs: float = 1.0):
-    "Pause for `secs` seconds; use if rate limited"
-    time.sleep(secs)
-    return f"Waited {secs}s"
+__version__ = "0.1.0"
