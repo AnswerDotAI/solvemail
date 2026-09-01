@@ -1,12 +1,18 @@
 """Load this skill when an agent needs to read, search, and organize Gmail using solvemail. It covers connecting to Gmail, searching messages and threads, reading bodies and attachments, and managing labels. Sending, replying, forwarding, and trashing are documented for reference but are not enabled by default.
 
-Connections use the `Gmail` client, constructed from fastgws credentials: `creds = await oauth_creds(scopes=[...], interactive=False)`, then `gmail = Gmail(creds)`. Scopes control what the token may do: `https://www.googleapis.com/auth/gmail.readonly` for reading and searching, `https://www.googleapis.com/auth/gmail.modify` to also add and remove labels, or `https://mail.google.com/` for everything including permanent deletion. `gmail.profile()` returns the account profile, with the address on its `email` attribute.
+Connections use the `Gmail` client, constructed from fastgws credentials. Scopes control what the token may do: `https://www.googleapis.com/auth/gmail.readonly` for reading and searching, `https://www.googleapis.com/auth/gmail.modify` to also add and remove labels, or `https://mail.google.com/` for everything including permanent deletion. `gmail.profile()` returns the account profile, with the address on its `email` attribute.
 
-`interactive=False` means only previously authorized tokens can be used. If it fails with a missing or invalid token error, the requested scopes have not been authorized yet. Authorize them with the two-step flow: `auth_url` returns an authorization link; show it to the user and ask them to visit it, approve access, and paste the code it displays back into the chat. Then pass whatever they paste (a bare code or the full redirect URL) to `finish_auth`, which exchanges it, saves the token, and returns the credentials. The code is single-use and PKCE-bound to this kernel's flow state, so relaying it through the chat is safe. `auth_url` requests the union of the saved token's scopes and the requested ones, so re-authorizing never drops existing grants.
+Prefer gclientid's split `auth_url` plus `finish_auth` flow for agent-driven OAuth. `auth_url` returns a PKCE-protected authorization link. Show it to the user and ask them to visit it, approve access, and paste the `code=...&state=...` result back into the chat. Pass that response to `await finish_auth(...)`. It validates the state, exchanges the single-use code, verifies the account, and saves the token.
 
-    url = auth_url(scopes=['https://www.googleapis.com/auth/gmail.readonly'])
-    # show `url` to the user; when they reply with the code:
-    gmail = Gmail(finish_auth(code))
+    account = 'me@example.com'
+    scopes = ['https://www.googleapis.com/auth/gmail.readonly']
+    cfg = config_dir()
+    token_path = cfg/f'oauth-token-{account.casefold()}.json'
+    url = auth_url(cfg/'oauth-client.json', token_path, preset=None, scopes=scopes, account=account)
+    # Show `url` to the user; when they reply with the copied result:
+    gmail = Gmail(await finish_auth(response))
+
+When the needed scopes are already authorized, load the saved token with `creds = await oauth_creds(account=account, scopes=scopes)`, then create `gmail = Gmail(creds)`. A missing, invalid, or insufficient token means you should use the split flow above.
 
 solvemail is organized around four resource types:
 
@@ -131,11 +137,16 @@ Dates are strings, not datetime objects."""
 from pyskills.core import allow
 from solvemail.core import (Gmail, Email, Emails, Thread, Threads,
                             Draft, Drafts, Label, EmailAttachment)
-from fastgws.auth import oauth_creds, auth_url, finish_auth
+from fastgws.auth import oauth_creds
+from gclientid import auth_url, config_dir, finish_auth
 
 __all__ = ['Gmail', 'Email', 'Emails', 'Thread', 'Threads',
            'Draft', 'Drafts', 'Label', 'EmailAttachment',
-           'oauth_creds', 'auth_url', 'finish_auth']
+           'oauth_creds', 'auth_url', 'config_dir', 'finish_auth']
+
+auth_url = allow(auth_url)
+config_dir = allow(config_dir)
+finish_auth = allow(finish_auth)
 
 allow({ Gmail: ['__init__', 'profile', 'search_emails', 'search_threads', 'search_drafts', 'create_draft',
                'labels', 'label', 'find_labels', 'create_label', 'lbl_ids'],
