@@ -14,6 +14,7 @@ dependencies = [
   "fastcore>=1.7.0",
   "google-api-python-client>=2.120.0",
   "google-auth>=2.30.0",
+  "fastgws>=0.2.5",
   "google-auth-oauthlib>=1.2.0",
   "google-auth-httplib2>=0.2.0",
   "httpx>=0.27.0",

@@ -1,5 +1,7 @@
-import sys
+import json, sys, threading
 from fastcore.test import test_eq as eq
+from datetime import datetime, timedelta, timezone
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from solvemail.email import b64e,b64d,mk_email,raw_email,parse_raw
 from solvemail.core import Gmail,Email,Draft
 
@@ -55,3 +57,26 @@ def test_unsubscribe_mailto_does_not_audit(monkeypatch):
     eq(sent[0][0]['To'],'unsub@example.com')
     eq(sent[0][0]['Subject'],'bye')
     eq(sent[0][0].get_content().strip(),'unsubscribe')
+
+
+def test_init_solveit_broker(monkeypatch, tmp_path):
+    import solvemail
+    expiry = (datetime.now(timezone.utc) + timedelta(seconds=3599)).isoformat()
+    resp = dict(access_token='at-1', expiry=expiry, email='eg@answer.ai',
+                scopes=solvemail.df_scopes + ['openid', 'email'])
+    class H(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(resp).encode())
+        def log_message(self, *a): pass
+    srv = HTTPServer(('127.0.0.1', 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('SOLVELP_URL', f'http://127.0.0.1:{srv.server_port}')
+    monkeypatch.setenv('AAI_USER_KEY', 'uid1:key')
+    solvemail.init()
+    eq(solvemail.g().creds.token, 'at-1')
+    eq(solvemail.g().creds.email, 'eg@answer.ai')
+    srv.shutdown()
