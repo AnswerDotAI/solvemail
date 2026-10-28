@@ -1,5 +1,5 @@
 import os,pytest
-from solvemail import Gmail
+from solvemail import Gmail,oauth_creds
 
 def _env(k,df=None):
     v = os.environ.get(k,df)
@@ -11,4 +11,4 @@ def g():
     creds = _env('GMAILX_CREDS','credentials.json')
     token = _env('GMAILX_TOKEN','token.json')
     interactive = _env('GMAILX_INTERACTIVE','1')=='1'
-    return Gmail(creds_path=creds,token_path=token,interactive=interactive)
+    return Gmail(oauth_creds(creds_path=creds,token_path=token,interactive=interactive))
