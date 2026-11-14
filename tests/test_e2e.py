@@ -1,59 +1,52 @@
 import time,uuid,pytest
-from fastcore.test import test_eq,test
-
-test_eq.__test__ = False
-test.__test__ = False
+from contextlib import ExitStack
+from solvemail import Thread
 
 def _poll(f,cond,max_wait=30,slp=1):
     t0 = time.time()
     while True:
         o = f()
         if cond(o): return o
-        if time.time()-t0>max_wait: return o
+        if time.time()-t0>max_wait: pytest.fail(f'Timed out after {max_wait}s waiting for Gmail')
         time.sleep(slp)
 
 @pytest.mark.timeout(120)
-def test_labels(g):
-    uid = uuid.uuid4().hex[:10]
-    nm = f'solvemail-e2e-{uid}'
-    lbl = g.create_label(nm)
-    try:
-        test_eq(g.label(nm).id,lbl.id)
-        test(lbl.id in [o.id for o in g.find_labels(uid)])
-        lbl.rename(nm+'-renamed')
-        test_eq(g.label(nm+'-renamed').id,lbl.id)
-    finally:
-        try: lbl.delete()
-        except Exception: pass
-
-@pytest.mark.timeout(120)
-def test_send_reply_draft_and_attachments(g):
+def test_gmail_conversation(g):
     me = g.profile().email
     uid = uuid.uuid4().hex[:10]
     subj = f'solvemail e2e {uid}'
-    lbl = g.create_label(f'solvemail-e2e-thread-{uid}')
-    m = None
-    try:
-        att = [('att.txt',b'hello solvemail','text/plain')]
-        m = g.send(to=me,subj=subj,body='hello',att=att)
+    unsub_subj = f'unsubscribe-{uid}'
+    with ExitStack() as cleanup:
+        lbl = g.create_label(f'solvemail-e2e-thread-{uid}')
+        cleanup.callback(lbl.delete)
+        assert g.label(lbl.name).id == lbl.id
+        assert lbl.id in [o.id for o in g.find_labels(uid)]
+        lbl.rename(lbl.name+'-renamed')
+        assert g.label(lbl.name).id == lbl.id
+        data = b'hello solvemail\x00\xff'
+        att = [('att.bin',data,'application/octet-stream')]
+        m = g.send(to=me,subj=subj,body='hello',att=att,headers={'List-Unsubscribe': f'<mailto:{me}?subject={unsub_subj}>'})
+        cleanup.callback(Thread(g,id=m.thread_id).trash)
         m = _poll(lambda: g.email(m.id,fmt='full'),lambda o: bool(o.d.get('payload')),max_wait=20)
-        aps = m.att_parts()
-        test(len(aps)>0)
-        test_eq(m.att(0),b'hello solvemail')
+        assert (m.to,m.subj) == (me,subj)
+        assert m.text().strip() == 'hello'
+        assert m.att(0) == data
 
-        t = g.thread(m.thread_id,fmt='metadata')
+        t = Thread(g,id=m.thread_id)
         t.add_labels(lbl)
         t = g.thread(t.id,fmt='metadata')
-        test(all(lbl.id in o.d.get('labelIds',[]) for o in t.emails()))
+        emails = t.emails()
+        assert emails and all(lbl.id in o.label_ids for o in emails)
 
-        n0 = len(g.thread(t.id,fmt='metadata').emails())
+        n0 = len(emails)
         d = t.reply_draft(body='reply')
         sent = d.send()
-        _poll(lambda: len(g.thread(t.id,fmt='metadata').emails()),lambda n: n>n0,max_wait=30)
-        test(sent.thread_id==t.id)
-    finally:
-        try:
-            if m: g.thread(m.thread_id).trash()
-        except Exception: pass
-        try: lbl.delete()
-        except Exception: pass
+        emails = _poll(lambda: g.thread(t.id,fmt='metadata').emails(),lambda o: len(o)>n0)
+        assert sent.thread_id == t.id and sent.id in [o.id for o in emails]
+
+        unsub = m.unsubscribe()
+        cleanup.callback(unsub.trash)
+        unsub = _poll(lambda: g.email(unsub.id,fmt='full'),lambda o: bool(o.d.get('payload')),max_wait=20)
+        assert unsub.to == me
+        assert unsub.subj == unsub_subj
+        assert unsub.text().strip() == 'unsubscribe'
