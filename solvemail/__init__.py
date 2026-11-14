@@ -9,6 +9,7 @@ from . import auth,core
 from .auth import *
 from .core import *
 import time
+from fastgws.auth import in_solveit, solveit_creds
 
 __all__ = [
     'init','g','solvemail_tools','refresh_solvemail','wait_secs'
@@ -34,9 +35,13 @@ refresh_solvemail()
 
 def init(creds=None, creds_path='credentials.json', token_path='token.json', scopes=None, user_id='me',
          interactive=True, redirect_uri=None, retries=3):
-    "Create a global `Gmail` client using `creds_path`/`token_path` and `scopes`"
+    "Create a global `Gmail` client using `creds_path`/`token_path` and `scopes`; in a SolveIt instance with no local files, uses the solve-lp token broker."
     global _g
-    if creds is None: creds = oauth_creds(creds_path=creds_path, token_path=token_path, scopes=scopes, interactive=interactive, redirect_uri=redirect_uri)
+    if creds is None:
+        if (creds_path=='credentials.json' and token_path=='token.json'
+            and not Path(token_path).exists() and not Path(creds_path).exists() and in_solveit()):
+            creds = solveit_creds(ifnone(scopes, df_scopes))
+        else: creds = oauth_creds(creds_path=creds_path, token_path=token_path, scopes=scopes, interactive=interactive, redirect_uri=redirect_uri)
     _g = Gmail(creds=creds, user_id=user_id, retries=retries)
 
 def g():
