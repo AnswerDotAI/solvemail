@@ -14,6 +14,7 @@ from fastcore.all import *
 from fastgws import GMail
 from fastgws.auth import *
 from .email import *
+from mistletoe.contrib.pygments_renderer import PygmentsRenderer
 
 import asyncio,html,httpx,mistletoe,sys
 
@@ -259,7 +260,7 @@ async def reply_draft(self:Email, body=None, html=None, reply_all=False, **kwarg
     me = (await self.gmail.profile()).email if reply_all else None
     rh = _reply_hdrs(self, me)
     hdrs = {k.replace('_','-'):v for k,v in dict(In_Reply_To=rh['in_reply_to'], References=rh['refs']).items() if v}
-    new = html or (mistletoe.markdown(body) if body else '')
+    new = html or (mistletoe.markdown(body, PygmentsRenderer) if body else '')
     html = new + await _reply_quote(self)
     msg = dict(raw=raw_email(mk_email(to=rh['to'], subj=rh['subj'], cc=rh['cc'],
                                       body=body or '', html=html, headers=hdrs, **kwargs)),
@@ -360,7 +361,7 @@ async def forward(self:Email, to, subj=None, body=None, att=None, **kwargs):
     th = await Thread.fetch(self.gmail, self.threadId)
     ems = th.emails.sorted(lambda e: int(e.internalDate)).filter(lambda e: int(e.internalDate) <= int(self.internalDate))
     parts = await asyncio.gather(*ems.map(_fwd_one))
-    html = (mistletoe.markdown(body) if body else '') + ''.join(h for h,_ in parts)
+    html = (mistletoe.markdown(body, PygmentsRenderer) if body else '') + ''.join(h for h,_ in parts)
     att = list(att or []) + [a for _,fa in parts for a in fa]
     return await self.gmail.send(to=to, subj=subj or f"Fwd: {self.get('subj')}", body=body or '', html=html, att=att, **kwargs)
 
