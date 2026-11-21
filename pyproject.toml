@@ -37,7 +37,7 @@ version = { attr = "solvemail.__version__" }
 include = ["solvemail", "solvemail.*"]
 
 [tool.pytest.ini_options]
-addopts = "-q"
+addopts = "-q -p timeout"
 testpaths = ["tests"]
 timeout = 120
 filterwarnings = [
